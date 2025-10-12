@@ -1,0 +1,9 @@
+id,name,brand,tier,form,skin_types,concerns,actives,size_ml,price_usd,device,include_device
+ser_niam_05,Niacinamide Serum 5%,FOREO,Core,serum,"oily,combo","redness,pore,oil",niacinamide 5%,30,19.0,,False
+ser_aha_05,Gentle AHA Exfoliant 5%,FOREO,Core,serum,"dry,combo,normal","texture,dullness",lactic acid 5%,30,22.0,,False
+ser_bha_02,BHA Serum 2%,FOREO,Core,serum,"oily,combo","clogged pores,oil",salicylic 2%,30,21.0,,False
+mos_cer,Barrier Repair Moisturizer,FOREO,Core,moisturizer,"dry,normal,combo","barrier,redness",ceramides+chol+FFA,50,28.0,,False
+spf_30,Daily Sunscreen SPF 30,FOREO,Core,spf,all,uv,UV filters,50,25.0,,False
+gel_light,Oil-Control Gel Moisturizer,FOREO,Core,moisturizer,"oily,combo","oil,shine",humectants,50,24.0,,False
+dev_luna3,LUNA 3 (device),FOREO,Device,device,all,deep cleanse,device,0,149.0,LUNA3,True
+ser_ret_01,Adapalene 0.1% (night),FOREO,Advanced,treatment,"oily,acne","acne,texture",adapalene 0.1%,15,15.0,,False
