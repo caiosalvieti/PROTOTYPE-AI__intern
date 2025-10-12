@@ -1,0 +1,279 @@
+# === imports & config ===
+import os, sys, glob, csv, json, argparse, time
+import numpy as np
+import pandas as pd
+import cv2
+from datetime import datetime
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import f1_score, balanced_accuracy_score, roc_auc_score, confusion_matrix
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from joblib import dump, load
+
+ROOT = os.path.abspath(".")
+DATA = os.path.join(ROOT, "DATA")
+RAW = os.path.join(DATA, "raw")
+INTERIM = os.path.join(DATA, "interim")
+PROCESSED = os.path.join(DATA, "processed")
+META = os.path.join(DATA, "metadata")
+OUT = os.path.join(ROOT, "experiments")
+for d in [DATA, RAW, INTERIM, PROCESSED, META, OUT]: os.makedirs(d, exist_ok=True)
+
+HAAR = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+
+# === utils ===
+def ts(): return datetime.now().strftime("%Y%m%d_%H%M%S")
+def imread_rgb(path):  # BGR->RGB
+    img = cv2.imread(path); 
+    if img is None: raise FileNotFoundError(path)
+    return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+def imwrite_rgb(path, img_rgb):
+    img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR); cv2.imwrite(path, img_bgr)
+
+# === QA (lighting/blur/glare/wb) ===
+def qa_checks(face_rgb):
+    gray = cv2.cvtColor(face_rgb, cv2.COLOR_RGB2GRAY)
+    mean_gray = float(np.mean(gray))
+    blur = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    hsv = cv2.cvtColor(face_rgb, cv2.COLOR_RGB2HSV)
+    h,s,v = cv2.split(hsv)
+    specular = float(((v>240)&(s<30)).sum())/v.size
+    r,g,b = [np.mean(c) for c in cv2.split(face_rgb)]
+    wb_shift = float(max(abs(r-b), abs(g-b)))
+    issues=[]
+    if mean_gray<45: issues.append("too_dark")
+    if mean_gray>210: issues.append("too_bright")
+    if blur<100: issues.append("blurry")
+    if specular>0.04: issues.append("glare_wet")
+    if wb_shift>18: issues.append("colored_light")
+    return issues, dict(mean_gray=mean_gray, blur=blur, specular=specular, wb_shift=wb_shift)
+
+# === color constancy (gray-world) ===
+def gray_world(img_rgb):
+    img = img_rgb.astype(np.float32)
+    mean = np.mean(img, axis=(0,1)) + 1e-6
+    scale = np.mean(mean)/mean
+    img *= scale
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+# === face detect (pick largest) ===
+def detect_face(rgb):
+    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    faces = cv2.CascadeClassifier(HAAR).detectMultiScale(gray, 1.1, 5)
+    if len(faces)==0: return None
+    x,y,w,h = max(faces, key=lambda f:f[2]*f[3])
+    return (x,y,w,h)
+
+# === zones (simple geometry) ===
+def crop_zones(face_rgb):
+    h,w,_ = face_rgb.shape
+    zones={}
+    # forehead (top 25%, center 60% width)
+    fw, fh = int(0.6*w), int(0.25*h)
+    fx, fy = (w-fw)//2, 0
+    zones["forehead"] = face_rgb[fy:fy+fh, fx:fx+fw]
+    # cheeks (middle 30-65% h; left/right 40% width)
+    y1, y2 = int(0.30*h), int(0.65*h)
+    xL2, xR1 = int(0.40*w), int(0.60*w)
+    zones["cheek_left"]  = face_rgb[y1:y2, 0:xL2]
+    zones["cheek_right"] = face_rgb[y1:y2, xR1:w]
+    # chin (bottom 65-95%, center 60% width)
+    cy1, cy2 = int(0.65*h), int(0.95*h)
+    zones["chin"] = face_rgb[cy1:cy2, fx:fx+fw]
+    return zones
+
+# === features (redness/texture/shine + QA) ===
+def redness_index(rgb):
+    r,g,b = cv2.split(rgb.astype(np.float32))
+    denom = (g+b)+1e-6
+    return float(np.mean(r/denom))
+def texture_index(rgb):
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+def shine_index(rgb):
+    gray = cv2.medianBlur(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY),3)
+    return float(np.mean(gray))/255.0
+def extract_features(face_rgb):
+    issues, qa = qa_checks(face_rgb)
+    zones = crop_zones(face_rgb)
+    feats = {}
+    for name, z in zones.items():
+        feats[f"{name}_red"] = redness_index(z)
+        feats[f"{name}_txt"] = texture_index(z)
+        feats[f"{name}_shn"] = shine_index(z)
+    # global
+    feats.update({"global_red": redness_index(face_rgb),
+                  "global_txt": texture_index(face_rgb),
+                  "global_shn": shine_index(face_rgb)})
+    feats.update({f"qa_{k}":v for k,v in qa.items()})
+    feats["qa_fail"] = int(len(issues)>0)
+    feats["qa_issues"] = "|".join(issues)
+    return feats, zones
+
+# === debug panel (save) ===
+def save_debug_panel(rgb, face_box, zones, save_path):
+    x,y,w,h = face_box
+    dbg = rgb.copy()
+    cv2.rectangle(dbg, (x,y), (x+w,y+h), (0,255,0), 2)
+    # draw simple zone boxes on face crop region
+    face = rgb[y:y+h, x:x+w].copy()
+    h2,w2,_ = face.shape
+    # same geometry as crop_zones
+    fw, fh = int(0.6*w2), int(0.25*h2); fx, fy = (w2-fw)//2, 0
+    cv2.rectangle(face, (fx,fy), (fx+fw,fy+fh), (255,0,0), 2)
+    y1, y2 = int(0.30*h2), int(0.65*h2); xL2, xR1 = int(0.40*w2), int(0.60*w2)
+    cv2.rectangle(face, (0,y1), (xL2,y2), (255,0,0), 2)
+    cv2.rectangle(face, (xR1,y1), (w2,y2), (255,0,0), 2)
+    cy1, cy2 = int(0.65*h2), int(0.95*h2)
+    cv2.rectangle(face, (fx,cy1), (fx+fw,cy2), (255,0,0), 2)
+    panel = np.hstack([cv2.resize(dbg, (rgb.shape[1], rgb.shape[0])), 
+                       cv2.resize(face, (rgb.shape[1], rgb.shape[0]))])
+    imwrite_rgb(save_path, panel)
+
+# === dataset (images -> features.csv) ===
+def build_dataset(input_glob=f"{RAW}/*.*", save_csv=os.path.join(META, "features.csv"), save_debug_imgs=True):
+    rows=[]
+    paths = sorted(glob.glob(input_glob))
+    for p in paths:
+        try:
+            img = imread_rgb(p)
+            img = gray_world(img)  # stabilize color
+            box = detect_face(img)
+            if box is None:
+                rows.append(dict(image_id=os.path.basename(p), error="no_face")); continue
+            x,y,w,h = box
+            if min(w,h)<200: 
+                rows.append(dict(image_id=os.path.basename(p), error="face_too_small")); continue
+            face = img[y:y+h, x:x+w]
+            feats, zones = extract_features(face)
+            feats.update(dict(image_id=os.path.basename(p), error=""))
+            rows.append(feats)
+            if save_debug:
+                dbg_path = os.path.join(INTERIM, f"debug_{os.path.splitext(os.path.basename(p))[0]}.jpg")
+                save_debug_panel(img, box, zones, dbg_path)
+        except Exception as e:
+            rows.append(dict(image_id=os.path.basename(p), error=str(e)))
+    df = pd.DataFrame(rows)
+    df.to_csv(save_csv, index=False)
+    print(f"[dataset] saved {save_csv} with {len(df)} rows")
+    return df
+
+# === train (baseline RF, expects labels.csv with columns: image_id,target) ===
+def train_baseline(features_csv=os.path.join(META, "features.csv"),
+                   labels_csv=os.path.join(META, "labels.csv"),
+                   model_path=os.path.join(OUT, "baseline_rf.joblib")):
+    feats = pd.read_csv(features_csv)
+    if not os.path.isfile(labels_csv):
+        print("[train] labels.csv not found; skipping."); return
+    labels = pd.read_csv(labels_csv)
+    df = feats.merge(labels, on="image_id")
+    df = df[df["error"]==""]  # drop failed
+    X = df.select_dtypes(include=[np.number]).drop(columns=[], errors="ignore")
+    y = df["target"]
+    # drop leakage / non-features
+    drop_cols = [c for c in ["qa_fail"] if c in X.columns]  # keep qa metrics though
+    X = X.drop(columns=drop_cols, errors="ignore")
+
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    f1s, bals, aucs = [], [], []
+    for tr, te in skf.split(X,y):
+        clf = Pipeline([("sc", StandardScaler(with_mean=False)), 
+                        ("rf", RandomForestClassifier(n_estimators=300, max_depth=None, random_state=42, n_jobs=-1))])
+        clf.fit(X.iloc[tr], y.iloc[tr])
+        proba = clf.predict_proba(X.iloc[te])[:,1] if len(np.unique(y))==2 else None
+        pred = clf.predict(X.iloc[te])
+        f1s.append(f1_score(y.iloc[te], pred, average="macro"))
+        bals.append(balanced_accuracy_score(y.iloc[te], pred))
+        if proba is not None:
+            try: aucs.append(roc_auc_score(y.iloc[te], proba))
+            except: pass
+    print(f"[train] F1(macro) {np.mean(f1s):.3f}±{np.std(f1s):.3f} | BalAcc {np.mean(bals):.3f}±{np.std(bals):.3f}" + 
+          (f" | ROC-AUC {np.mean(aucs):.3f}±{np.std(aucs):.3f}" if len(aucs)>0 else ""))
+    # final fit
+    clf = Pipeline([("sc", StandardScaler(with_mean=False)), 
+                    ("rf", RandomForestClassifier(n_estimators=300, max_depth=None, random_state=42, n_jobs=-1))])
+    clf.fit(X, y)
+    dump(dict(model=clf, features=list(X.columns)), model_path)
+    print(f"[train] saved model -> {model_path}")
+
+# === recommendations (simple rules) ===
+def recommend_from_features(feats_row):
+    recs=[]
+    # thresholds
+    red = feats_row.get("global_red",0.0); txt=feats_row.get("global_txt",0.0); shn=feats_row.get("global_shn",0.0)
+    dark = feats_row.get("qa_mean_gray", 128)<45
+    bright = feats_row.get("qa_mean_gray", 128)>210
+    blur = feats_row.get("qa_blur", 200)<100
+    glare = feats_row.get("qa_specular", 0.0)>0.04
+    wb = feats_row.get("qa_wb_shift", 0.0)>18
+    if any([dark,bright,blur,glare,wb]):
+        if dark: recs.append("Retake: brighter room.")
+        if bright: recs.append("Retake: avoid overexposed light.")
+        if blur: recs.append("Retake: hold still / focus.")
+        if glare: recs.append("Retake: pat skin dry / avoid direct lamp.")
+        if wb: recs.append("Retake: use neutral white light.")
+        return recs
+    if red>0.62: recs += ["Barrier repair: ceramides+cholesterol+FFA.", "Niacinamide 2–5%.", "Daily SPF 30+."]
+    if shn>0.58 and txt>180: recs += ["BHA 0.5–2% (3x/week).", "Light gel moisturizer.", "Adapalene 0.1% (2x/week, buffer)."]
+    if txt>250: recs += ["Gentle PHA/AHA (1–2x/week).", "Humectant serum + occlusive at night."]
+    if red<0.55 and shn<0.46 and txt<160: recs += ["Maintain routine: gentle cleanser + moisturizer + SPF."]
+    if not recs: recs.append("General care: gentle cleanser, ceramide moisturizer, SPF.")
+    return recs
+
+# === inference (one image -> features + optional model + recs) ===
+def infer(image_path, model_path=os.path.join(OUT, "baseline_rf.joblib")):
+    img = imread_rgb(image_path)
+    img = gray_world(img)
+    box = detect_face(img)
+    if box is None: 
+        print("[infer] no face detected"); return
+    x,y,w,h = box
+    face = img[y:y+h, x:x+w]
+    feats, zones = extract_features(face)
+    # save debug
+    dbg = os.path.join(INTERIM, f"debug_{ts()}.jpg"); save_debug_panel(img, box, zones, dbg)
+    print(f"[infer] debug saved -> {dbg}")
+    # print features
+    print(json.dumps(feats, indent=2))
+    # model predict if exists
+    if os.path.isfile(model_path):
+        bundle = load(model_path); model, cols = bundle["model"], bundle["features"]
+        X = pd.DataFrame([{k:feats.get(k,0.0) for k in cols}])
+        pred = model.predict(X)[0]
+        print(f"[infer] model prediction -> {pred}")
+    # recs
+    recs = recommend_from_features(feats)
+    print("[infer] recommendations:")
+    for r in recs: print(" -", r)
+
+# === main (CLI) ===
+def main():
+    ap = argparse.ArgumentParser(description="Skin AI prototype (single-file).")
+    sp = ap.add_subparsers(dest="cmd")
+    sp.add_parser("build-dataset")
+    tr = sp.add_parser("train")
+    tr.add_argument("--features", default=os.path.join(META, "features.csv"))
+    tr.add_argument("--labels", default=os.path.join(META, "labels.csv"))
+    tr.add_argument("--model", default=os.path.join(OUT, "baseline_rf.joblib"))
+    inf = sp.add_parser("infer")
+    inf.add_argument("--image", required=True)
+    inf.add_argument("--model", default=os.path.join(OUT, "baseline_rf.joblib"))
+    ap.add_argument("--glob", default=f"{RAW}/*.jpg")
+    args = ap.parse_args()
+
+    if args.cmd=="build-dataset":
+        build_dataset(input_glob=args.glob)
+    elif args.cmd=="train":
+        train_baseline(args.features, args.labels, args.model)
+    elif args.cmd=="infer":
+        infer(args.image, args.model)
+    else:
+        print("Usage:")
+        print("  python prototype.py build-dataset --glob 'DATA/raw/*.jpg'")
+        print("  python prototype.py train --features DATA/metadata/features.csv --labels DATA/metadata/labels.csv")
+        print("  python prototype.py infer --image path.jpg")
+
+if __name__ == "__main__":
+    main()

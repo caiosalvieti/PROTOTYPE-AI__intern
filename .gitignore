@@ -1,0 +1,15 @@
+__pycache__/
+.DS_Store
+.venv/
+data/
+models/
+experiments/
+*.pt
+*.pth
+*.h5
+*.keras
+*.zip
+*.mp4
+*.mov
+DATA/
+!DATA/products_kb.csv

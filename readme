@@ -1,0 +1,16 @@
+cd /Users/caiosalvieti/PROTOTYPE
+
+source .venv/bin/activate
+
+python main.py build-dataset --glob "DATA/raw/*.*"
+
+python main.py build-dataset --glob "DATA/raw/*.*" --max 200
+
+python - <<'PY'
+import pandas as pd
+df = pd.read_csv("DATA/metadata/features.csv")
+ok = df["error"].isna() & (df["qa_fail"].fillna(1)==0)
+print("Rows:", len(df), "| OK (face+QA pass):", int(ok.sum()))
+PY
+
+python main.py infer --image "DATA/raw/$(ls DATA/raw | head -1)"
