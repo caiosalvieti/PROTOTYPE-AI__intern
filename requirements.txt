@@ -1,7 +1,8 @@
+streamlit
+pillow
+numpy<2
 pandas
-numpy
-opencv-python
 scikit-learn
 joblib
-streamlit
-Pillow
+opencv-python-headless
+watchdog
