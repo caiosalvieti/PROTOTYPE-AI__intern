@@ -1,16 +1,11 @@
-cd /Users/caiosalvieti/PROTOTYPE
+Hi, I'm Caio!
 
-source .venv/bin/activate
+I been curious for ML and analysis for the last 3 years, my bachelors is Software Engineering. 
+Before was DattaScience and AI when I been in Brasil, now just one more student in Poland.
 
-python main.py build-dataset --glob "DATA/raw/*.*"
+My code has a lot to develop, maybe is not following the concepts of quality or even of protection still,
+also im starting to develop the code to the next level, at swift, build the App for Apple.
 
-python main.py build-dataset --glob "DATA/raw/*.*" --max 200
+Yes, really frustated because the company didnt allowed me to run my project, on cristhmas the world will have a gift!
 
-python - <<'PY'
-import pandas as pd
-df = pd.read_csv("DATA/metadata/features.csv")
-ok = df["error"].isna() & (df["qa_fail"].fillna(1)==0)
-print("Rows:", len(df), "| OK (face+QA pass):", int(ok.sum()))
-PY
-
-python main.py infer --image "DATA/raw/$(ls DATA/raw | head -1)"
+Pa, Pa.
