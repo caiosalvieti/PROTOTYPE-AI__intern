@@ -154,9 +154,9 @@ if "last_img" not in st.session_state: st.session_state.last_img = None
 
 def _render_image_inline(src_label, src_file_or_path):
     if isinstance(src_file_or_path, str):
-        st.image(Image.open(src_file_or_path), use_column_width=True, caption=src_label)
+        st.image(Image.open(src_file_or_path), use_container_width=True, caption=src_label)
     else:
-        st.image(Image.open(io.BytesIO(src_file_or_path.getvalue())), use_column_width=True, caption=src_label)
+        st.image(Image.open(io.BytesIO(src_file_or_path.getvalue())), use_container_width=True, caption=src_label)
 
 # Trigger analysis
 if tab_analyze:
@@ -189,7 +189,7 @@ with tab_results:
         with c1:
             _render_image_inline(st.session_state.last_src, st.session_state.last_img)
             if out.get("debug_bytes"):
-                st.image(out["debug_bytes"], caption="Debug panel (face + zones)", use_column_width=True)
+                st.image(out["debug_bytes"], caption="Debug panel (face + zones)", use_container_width=True)
 
         # Right: profile metrics
         prof = out.get("profile", {})
