@@ -1,4 +1,4 @@
-# Skinaizer — Privacy-First Skin Analysis for People Who Actually Ship
+# Skinaizer  - Privacy-First Skin Analysis for People Who Actually Ship
 
 Real-time skin assessment that doesn’t hoard faces. Streamlit front end, FastAPI backend, reproducible ML pipeline, optional Raspberry Pi capture. Built for local runs first; cloud is an opt-in, not a requirement.
 
