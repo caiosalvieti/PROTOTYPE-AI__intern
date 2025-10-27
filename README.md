@@ -1,62 +1,68 @@
-# Skinaizer – Privacy-First Skin Analysis
+# Skinaizer — Privacy-First Skin Analysis for People Who Actually Ship
 
-> Real-time skin assessment without storing faces. Streamlit app + ML models + optional Raspberry Pi camera kit.
-
----
-
-## ✨ Features
-
-* **On-device inference** (no cloud upload) with opt-in telemetry
-* **Face/skin region detection** (no image persistence; RAM-only pipeline)
-* **Condition scoring** (e.g., hydration, redness, blemishes) with model ensembles
-* **Explainable outputs** (saliency/SHAP-like overlays)
-* **Recommendation engine** (rules + ML) with a small product KB
-* **Raspberry Pi capture module** (Pi 5 + Cam Module 3 + LED ring)
-* **API layer** for mobile apps (FastAPI, JSON)
-* **Reproducible ML training** (Poetry + Makefile)
+Real-time skin assessment that doesn’t hoard faces. Streamlit front end, FastAPI backend, reproducible ML pipeline, optional Raspberry Pi capture. Built for local runs first; cloud is an opt-in, not a requirement.
 
 ---
 
-## 📦 Stack
+## What this project is (and isn’t)
 
-* **App:** Streamlit
-* **API:** FastAPI (uvicorn)
-* **ML:** scikit-learn, XGBoost/LightGBM (optional), OpenCV
-* **Explainers:** shap (optional)
-* **Packaging:** Poetry, pyproject.toml
-* **CI (optional):** GitHub Actions
-* **Container:** Docker
+* **Is:** A modular, on-device skin analysis stack. You feed images or features; it detects skin regions, scores conditions (hydration, redness, blemishes), explains outputs, and returns actionable recommendations.
+* **Isn’t:** A data-grab. Images never touch disk by default. Telemetry is off unless you explicitly enable minimal, aggregated metrics.
+* **Audience:** Engineers, applied ML folks, and product teams who need a demoable prototype that doesn’t collapse under real-world lighting and device variability.
 
 ---
 
-## 📁 Repository layout
+## Feature set (clear and blunt)
+
+* **On-device inference:** CPU-friendly models with optional ONNX export. Runs on macOS/Linux/WSL and Raspberry Pi 5.
+* **Skin region detection:** OpenCV-based pipelines; configurable thresholds for different cameras/lighting. No persistent storage of frames.
+* **Condition scoring:** Ensemble of classical ML (Gradient Boosting, Random Forest). Calibrated outputs; predictable and debuggable.
+* **Explainability:** Saliency/SHAP-style overlays and per-feature attributions, so decisions aren’t black boxes.
+* **Recommendations:** Rule system + light ML re-ranking tied to a small product knowledge base you can swap out.
+* **API surface:** FastAPI endpoints for batch scoring and mobile integration. Clean JSON, typed schemas.
+* **Reproducible training:** Poetry + Makefile + pinned deps. Notebooks for EDA; CLI for train/eval/export.
+* **Raspberry Pi capture (optional):** Camera Module 3 + LED ring setup. Deterministic capture lighting to reduce score variance.
+
+---
+
+## Tech stack and why
+
+* **Streamlit UI:** Fast iteration for UX flows and operator tooling.
+* **FastAPI:** Strong typing, auto-docs, simple deploy story.
+* **scikit-learn (+ LightGBM/XGBoost optional):** Baselines that are stable, explainable, and fast on CPU.
+* **OpenCV:** Composable image ops, zero drama.
+* **Poetry:** Environment hygiene and reproducible builds.
+* **Docker:** One-liner runtime parity across machines.
+
+---
+
+## Repository layout
 
 ```
 skinaizer/
 ├─ apps/
-│  ├─ web/                 # Streamlit UI
+│  ├─ web/                 # Streamlit UI (quick demos + operator view)
 │  │  ├─ app.py
 │  │  └─ pages/
-│  ├─ api/                 # FastAPI service
+│  ├─ api/                 # FastAPI service (clean contracts)
 │  │  ├─ main.py
 │  │  └─ routers/
-│  └─ tools/               # CLI tools (e.g., batch scoring)
+│  └─ tools/               # CLI utilities (batch scoring, capture helpers)
 │     └─ score.py
 ├─ models/
-│  ├─ current/             # *.pkl / *.onnx
-│  └─ experiments/
+│  ├─ current/             # Deployed *.pkl / *.onnx
+│  └─ experiments/         # Checkpoints and trials
 ├─ DATA/
-│  ├─ raw/
-│  ├─ interim/
-│  └─ products_kb.csv
+│  ├─ raw/                 # Source data (no faces or anonymized descriptors)
+│  ├─ interim/             # Preprocessed artifacts
+│  └─ products_kb.csv      # Lightweight recommender KB
 ├─ src/
-│  ├─ skinaizer/           # Python package (preprocess, infer, explain, privacy)
-│  └─ pipeline.py
-├─ notebooks/              # EDA + experiments
+│  └─ skinaizer/           # Core package: preprocess, infer, explain, privacy
 ├─ configs/
-│  ├─ app.toml
-│  └─ model.yaml
-├─ tests/
+│  ├─ app.toml             # UI and runtime toggles
+│  └─ model.yaml           # Features, thresholds, ensembles, calibration
+├─ notebooks/              # EDA + experiments (keep deterministic)
+├─ tests/                  # Unit + E2E
 ├─ .env.example
 ├─ Makefile
 ├─ pyproject.toml
@@ -66,29 +72,25 @@ skinaizer/
 
 ---
 
-## 🚀 Quickstart (local)
+## Quickstart
 
-**Requirements:** Python 3.11+, Poetry, Git, macOS/Linux/WSL.
+Requirements: Python 3.11+, Poetry, Git. Linux/macOS/WSL tested.
 
 ```bash
-# 1) Clone
 git clone https://github.com/your-org/skinaizer.git
 cd skinaizer
 
-# 2) Create env
 poetry install --with dev
 
-# 3) Configure
-cp .env.example .env                       # edit secrets & toggles
+cp .env.example .env
 mkdir -p models/current DATA/interim
 
-# 4) (Optional) fetch a demo model
-# put model files into models/current/ e.g., skin_gbrt.pkl
+# Drop a demo model in models/current/, e.g. skin_gbrt.pkl
 
-# 5) Run web app
+# UI
 poetry run streamlit run apps/web/app.py
 
-# 6) Run API (in another shell)
+# API (separate shell)
 poetry run uvicorn apps.api.main:app --reload --port 8000
 ```
 
@@ -99,178 +101,192 @@ Open:
 
 ---
 
-## ⚙️ Configuration
+## Configuration you’ll actually touch
 
-Edit `.env` (use `.env.example` as a guide):
+`.env` (see `.env.example`):
 
 ```
-# Runtime
 ENV=dev
 LOG_LEVEL=INFO
 
-# Privacy
 DISABLE_IMAGE_PERSISTENCE=true
 ANONYMIZE_SESSION_IDS=true
-TELEMETRY_OPTOUT=true    # set false to allow minimal, aggregated metrics
+TELEMETRY_OPTOUT=true
 
-# Models
 MODEL_DIR=./models/current
 PRODUCT_KB=./DATA/products_kb.csv
 
-# API
 API_HOST=0.0.0.0
 API_PORT=8000
 ```
 
-Fine-tune behavior in `configs/app.toml` and `configs/model.yaml` (thresholds, preprocessing, ensemble weights, recommendation rules).
+`configs/app.toml`: UI toggles, capture endpoints, export permissions.
+`configs/model.yaml`: feature pipeline, condition thresholds, ensemble weights, calibration mode.
 
 ---
 
-## 🔒 Privacy by design
+## Privacy model (zero hand-waving)
 
-* **No writes of user images to disk** by default (`DISABLE_IMAGE_PERSISTENCE=true`).
-* All frames processed in memory; optional **ephemeral cache** with secure wipe on shutdown.
-* Face boxes are not stored; **only aggregate scores** can be logged if telemetry is enabled.
-* “Screenshot” and “export” buttons are **off** by default for compliance.
+* Images are processed in memory. Disk writes are blocked by default.
+* Any optional cache is ephemeral and wiped on shutdown.
+* Telemetry is opt-in and aggregates only non-identifying stats (counts, model latency, score distributions).
+* Export functions are off by default and must be enabled explicitly.
 
 ---
 
-## 📸 Raspberry Pi capture (optional)
+## Architecture (how pieces talk)
 
-**Hardware:** Raspberry Pi 5, Camera Module 3 (12 MP, AF), LED ring/soft light, short USB-C PD.
+* **UI → API:** Streamlit calls FastAPI with either an image patch or precomputed features.
+* **API → Core:** `skinaizer` package handles preprocessing, inference, calibration, explanation, and recommendation generation.
+* **Storage:** Only models and configs live on disk. No user frames unless you toggle exports on.
+* **Extensibility:** Replace `products_kb.csv`, swap models in `models/current/`, adjust thresholds in `configs/model.yaml` without code changes.
 
-1. Flash **Raspberry Pi OS** (64-bit).
-2. Enable camera: `sudo raspi-config` → Interface Options.
-3. Install deps:
+---
+
+## Raspberry Pi capture (optional, but practical)
+
+Hardware: Raspberry Pi 5, Camera Module 3, constant-intensity LED ring.
+
+Setup:
 
 ```bash
+# On Pi
+sudo raspi-config   # enable camera
 sudo apt update && sudo apt install -y python3-pip libatlas-base-dev
 pip3 install opencv-python-headless fastapi uvicorn pydantic
 ```
 
-4. Launch a small capture server (example in `apps/tools/capture_server.py`) or stream frames via RTSP/WebRTC to the main app.
-5. In Streamlit, set `CAPTURE_ENDPOINT` in `.env`.
+Run the capture server from `apps/tools/capture_server.py` (HTTP or RTSP).
+Point the UI to it by setting `CAPTURE_ENDPOINT` in `.env`.
 
-> Tip: keep **consistent lighting**; enable the LED at a fixed intensity to reduce variance.
+Notes:
+
+* Fix the camera distance and lighting angle once. Consistency > perfection.
+* Use a color checker in calibration mode to anchor white balance.
 
 ---
 
-## 🧪 Testing
+## API contracts
+
+* `POST /v1/score`
+
+  * Input: base64 image patch or feature vector.
+  * Output: condition scores, confidence, optional explanation vectors, and recommendation entries.
+* `GET /healthz`
+
+  * Input: none.
+  * Output: build info and model availability.
+* `POST /v1/explain` (optional)
+
+  * Input: same payload as `/v1/score`.
+  * Output: saliency map metadata or SHAP values.
+
+Schemas live under `apps/api/routers/` and are typed with Pydantic.
+
+---
+
+## Training and evaluation
+
+Use the CLI to keep runs reproducible:
 
 ```bash
-# Unit tests + lint
-poetry run pytest -q
-poetry run ruff check .
-poetry run mypy src
+# Train baseline GBRT
+poetry run python src/skinaizer/pipeline.py train --config configs/model.yaml
 
-# E2E (headless)
-poetry run pytest -q -m "e2e"
+# Evaluate with GroupKFold and save metrics
+poetry run python src/skinaizer/pipeline.py eval --split groupkfold
+
+# Export model (pickle) and optionally ONNX
+poetry run python src/skinaizer/pipeline.py export --out models/current/skin_gbrt.pkl
+poetry run python src/skinaizer/pipeline.py export-onnx --out models/current/skin.onnx
 ```
+
+Method choices:
+
+* Start with Gradient Boosting and Random Forest for stability.
+* Add LightGBM/XGBoost when you need speed on larger feature sets.
+* Keep calibration on (Platt/Isotonic) if scores drive user-facing messaging.
 
 ---
 
-## 🧠 Training & experiments
-
-1. Drop curated data into `DATA/raw/` (no faces; numeric features or anonymized descriptors).
-2. Use notebooks in `notebooks/` for EDA and feature selection.
-3. Train via Makefile recipes:
+## Testing
 
 ```bash
-# Reproduce a compact GBRT baseline
-poetry run python src/pipeline.py train --config configs/model.yaml
-
-# Evaluate + export model
-poetry run python src/pipeline.py eval --split groupkfold
-poetry run python src/pipeline.py export --out models/current/skin_gbrt.pkl
+poetry run pytest -q            # unit tests
+poetry run ruff check .         # lint
+poetry run mypy src             # types
+poetry run pytest -q -m "e2e"   # headless E2E
 ```
 
-4. (Optional) Export to ONNX for mobile:
+What to test:
 
-```bash
-poetry run python src/pipeline.py export-onnx --out models/current/skin.onnx
-```
-
-**Algorithms included:** Gradient Boosting (baseline), Random Forest (robust baseline), XGBoost/LightGBM (optional), Logistic/Linear models for ablations. SHAP summaries for model choice justification.
+* Deterministic preprocessing for the same input.
+* Score monotonicity across controlled lighting sets.
+* No disk writes when `DISABLE_IMAGE_PERSISTENCE=true`.
 
 ---
 
-## 📱 Mobile integration
-
-* **REST API** (`/v1/score`) accepts a cropped skin patch or precomputed features; returns scores + explanations.
-* iOS/Swift client can call the API or run **ONNX Runtime** on-device for fully offline mode.
-* See `apps/api/routers/score.py` for payload schemas.
-
----
-
-## 🐳 Docker
+## Docker
 
 ```bash
 docker build -t skinaizer:latest .
 docker run --rm -p 8501:8501 -p 8000:8000 --env-file .env skinaizer:latest
 ```
 
+Use this when you need parity across dev machines or a quick server deploy behind a reverse proxy.
+
 ---
 
-## 🔧 Makefile cheatsheet
+## Makefile shortcuts
 
 ```bash
-make setup          # bootstrap (poetry, pre-commit)
+make setup          # poetry, pre-commit
 make run-web        # streamlit
 make run-api        # uvicorn
-make train          # ML training
+make train          # model training
 make test           # tests + lint
-make fmt            # ruff format
+make fmt            # auto-format
 ```
 
 ---
 
-## 🧭 Roadmap
+## Roadmap (practical, not wishful)
 
-* [ ] Improved skin-region segmentation (light-invariant)
-* [ ] Model cards & datasheets for transparency
-* [ ] On-device iOS prototype (Core ML / ORT)
-* [ ] Calibration with color checker & auto-white balance
-* [ ] Multi-illumination consensus scoring
-* [ ] Differential privacy for telemetry
-
----
-
-## 🤝 Contributing
-
-1. Create a feature branch: `git checkout -b feat/your-thing`
-2. Run `make test` before pushing
-3. Open a PR with screenshots and a short demo clip (synthetic data only)
-
-Code style: PEP 8, type hints, small pure functions, docstrings.
+* Improved segmentation robust to mixed indoor lighting.
+* Model cards and datasheets shipped with each release.
+* iOS on-device prototype via Core ML / ONNX Runtime.
+* Calibration with color checker and ambient-light compensation.
+* Multi-illumination consensus to reduce false positives.
+* Differential privacy options for telemetry when enabled.
 
 ---
 
-## 📄 License
+## Contributing
 
-MIT (see `LICENSE`). If you integrate clinical features, ensure regulatory compliance for your jurisdiction before distribution.
+* Fork and branch: `feat/<topic>` or `fix/<topic>`.
+* Keep PRs tight and test-backed. Attach screenshots for UI changes.
+* Follow PEP 8, type hints everywhere, and prefer small pure functions over clever blobs.
 
 ---
 
-## 📚 Citation
+## License
 
-If this tool helps your research, please cite:
+MIT. If you aim for medical use cases, handle regulatory compliance in your jurisdiction before distribution. This repo does not constitute a medical device.
+
+---
+
+## Citation
 
 ```
-K. Nimz et al. Skinaizer: Privacy-First Skin Analysis with On-Device ML, 2025. GitHub repository.
+Caio Salvieti Da Silva et al. Skinaizer: Privacy-First Skin Analysis with On-Device ML, 2025. GitHub repository.
 ```
 
 ---
 
-## 🆘 Troubleshooting
+## Troubleshooting that saves time
 
-* **Every photo gives the same result** → clear model cache, verify preprocessing pipeline isn’t normalizing to a constant; run `make test` and check `DATA/products_kb.csv` isn’t being used as a fallback.
-* **Camera not detected (Pi)** → `libcamera-hello` test, check ribbon seating, enable camera in raspi-config.
-* **Performance drops on M-series Macs** → prefer `opencv-python-headless`, set `OMP_NUM_THREADS=1` for reproducibility.
-
----
-
-## 📝 Acknowledgements
-
-Thanks to the open-source community and academic collaborators in computational toxicology and ML for reproducible research practices.
+* Identical scores for all images: check preprocessing; a faulty normalization can flatline features. Run `make test` and verify the feature variance.
+* Pi camera not detected: run `libcamera-hello`, reseat the ribbon cable, re-enable in `raspi-config`.
+* M-series Macs acting slow: use `opencv-python-headless`, set `OMP_NUM_THREADS=1`, and avoid massive SHAP runs on CPU in dev.
 
 ---
