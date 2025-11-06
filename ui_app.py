@@ -108,20 +108,19 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
     # -------- image(s) --------
     col_img, col_overlay = st.columns(2)
 
-    # original (dataset path vs UploadedFile)
+    # show original image (path vs UploadedFile)
     if isinstance(img_source, str):
-        col_img.image(img_source, caption=os.path.basename(img_source), use_container_width=True)
+        col_img.image(img_source, caption=os.path.basename(img_source), use_column_width=True)
     else:
-        # pass UploadedFile directly to avoid PIL issues with some JPEGs
-        col_img.image(img_source, caption="Uploaded", use_container_width=True)
+        col_img.image(img_source, caption="Uploaded", use_column_width=True)
 
     # overlay (from debug panel if present, else draw rectangle)
     if out.get("debug_bytes"):
-        col_overlay.image(out["debug_bytes"], caption="Debug panel (face + zones)", use_container_width=True)
+        col_overlay.image(out["debug_bytes"], caption="Debug panel (face + zones)", use_column_width=True)
     else:
         try:
             dbg = _draw_overlay(out["rgb"], out["box"])
-            col_overlay.image(dbg, caption="Detection overlay", use_container_width=True)
+            col_overlay.image(dbg, caption="Detection overlay", use_column_width=True)
         except Exception:
             pass
 
@@ -146,19 +145,15 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
 
     with st.expander("Raw JSON (profile & features)"):
         c1, c2 = st.columns(2)
-        with c1:
-            st.json(prof)
-        with c2:
-            st.json(out.get("features", {}))
+        with c1: st.json(prof)
+        with c2: st.json(out.get("features", {}))
 
     # -------- plan & reasons --------
     plan = out.get("plan")
     if not plan:
-        st.info("No plan (RecEngine not loaded).")
-        return
+        st.info("No plan (RecEngine not loaded)."); return
     if "error" in plan:
-        st.error(plan["error"])
-        return
+        st.error(plan["error"]); return
 
     st.markdown(f"### Suggested routine — {plan.get('plan', 'Core')}")
     reasons = plan.get("reasons") or {}
@@ -170,22 +165,17 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
         size = it.get("size_ml")
         line = f"- **{name}** — *{form}*"
         if size:
-            try:
-                line += f" · {float(size):.0f} ml"
-            except Exception:
-                line += f" · {size} ml"
+            try: line += f" · {float(size):.0f} ml"
+            except Exception: line += f" · {size} ml"
         st.markdown(line)
-        if it.get("reason"):  # old-engine support
-            st.caption(it["reason"])
+        if it.get("reason"): st.caption(it["reason"])
 
-    if reasons:  # new-engine rationale per form
+    if reasons:
         st.caption("Why these picks:")
         for f, lines in reasons.items():
-            if not lines:
-                continue
+            if not lines: continue
             with st.expander(f"{f} rationale"):
-                for ln in lines:
-                    st.write("• " + ln)
+                for ln in lines: st.write("• " + ln)
 
 # ---------- UI ----------
 st.set_page_config(page_title="SkinAizer — Live Analysis", page_icon="🧴", layout="wide")
