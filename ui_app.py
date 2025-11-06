@@ -102,19 +102,18 @@ def _run_pipeline(image_path: str, tier: str = "Core", include_device: bool = Tr
         "qa": qa,
         "rgb": rgb,
     }
-
-def _render_results(src_label: str, img_source, out: Dict[str, Any]):
+def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
     st.subheader(f"Results — {src_label}")
 
     # -------- image(s) --------
     col_img, col_overlay = st.columns(2)
-    # original
-   if isinstance(img_source, str):
-    # dataset file path – Streamlit can read the path directly
-    col_img.image(img_source, caption=os.path.basename(img_source), use_container_width=True)
-else:
-    # UploadedFile – pass it directly; avoids PIL errors on truncated JPEGs
-    col_img.image(img_source, caption="Uploaded", use_container_width=True)
+
+    # original (dataset path vs UploadedFile)
+    if isinstance(img_source, str):
+        col_img.image(img_source, caption=os.path.basename(img_source), use_container_width=True)
+    else:
+        # pass UploadedFile directly to avoid PIL issues with some JPEGs
+        col_img.image(img_source, caption="Uploaded", use_container_width=True)
 
     # overlay (from debug panel if present, else draw rectangle)
     if out.get("debug_bytes"):
@@ -147,8 +146,10 @@ else:
 
     with st.expander("Raw JSON (profile & features)"):
         c1, c2 = st.columns(2)
-        with c1: st.json(prof)
-        with c2: st.json(out.get("features", {}))
+        with c1:
+            st.json(prof)
+        with c2:
+            st.json(out.get("features", {}))
 
     # -------- plan & reasons --------
     plan = out.get("plan")
@@ -160,9 +161,8 @@ else:
         return
 
     st.markdown(f"### Suggested routine — {plan.get('plan', 'Core')}")
-    reasons = plan.get("reasons") or {}     # new engine
-    by_type = plan.get("by_type") or {}     # new engine
-    items   = plan.get("items", [])         # both engines
+    reasons = plan.get("reasons") or {}
+    items   = plan.get("items", [])
 
     for it in items:
         name = f"{(it.get('brand') or '').title()} {it.get('name','')}".strip()
@@ -175,12 +175,10 @@ else:
             except Exception:
                 line += f" · {size} ml"
         st.markdown(line)
-        # Old engine inline reasons
-        if it.get("reason"):
+        if it.get("reason"):  # old-engine support
             st.caption(it["reason"])
 
-    # New engine rationale per form
-    if reasons:
+    if reasons:  # new-engine rationale per form
         st.caption("Why these picks:")
         for f, lines in reasons.items():
             if not lines:
