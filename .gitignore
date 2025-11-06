@@ -1,30 +1,31 @@
-__pycache__/
+# OS / Python
 .DS_Store
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Virtual envs
 .venv/
-data/
-models/
+
+# Experiments & models
 experiments/
+models/
+*.joblib
 *.pt
 *.pth
 *.h5
 *.keras
 *.zip
+
+# Videos / big media
 *.mp4
 *.mov
-DATA/
-!DATA/products_kb.csv
-__pycache__/
-.DS_Store
-.venv/
-data/
-models/
-experiments/
-*.pt
-*.pth
-*.h5
-*.keras
-*.zip
-*.mp4
-*.mov
-DATA/
-!DATA/products_kb.csv
+
+# Optional: OpenCV Caffe weights (use Git LFS if you must track)
+*.caffemodel
+*.prototxt
+tools/models/**
+!tools/models/
+!tools/models/README.md
+
+# Lowercase data dir (just in
