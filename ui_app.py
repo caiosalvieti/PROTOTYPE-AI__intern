@@ -109,10 +109,13 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]):
     # -------- image(s) --------
     col_img, col_overlay = st.columns(2)
     # original
-    if isinstance(img_source, str):
-        col_img.image(Image.open(img_source), caption=os.path.basename(img_source), use_container_width=True)
-    else:
-        col_img.image(Image.open(io.BytesIO(img_source.getvalue())), caption="Uploaded", use_container_width=True)
+   if isinstance(img_source, str):
+    # dataset file path – Streamlit can read the path directly
+    col_img.image(img_source, caption=os.path.basename(img_source), use_container_width=True)
+else:
+    # UploadedFile – pass it directly; avoids PIL errors on truncated JPEGs
+    col_img.image(img_source, caption="Uploaded", use_container_width=True)
+
     # overlay (from debug panel if present, else draw rectangle)
     if out.get("debug_bytes"):
         col_overlay.image(out["debug_bytes"], caption="Debug panel (face + zones)", use_container_width=True)
