@@ -10,18 +10,18 @@ try:
 except Exception:
     _PANDAS_OK = False
 
-# ---- paths for auto-calibration (change if needed) ----
+#  paths for auto-calibration 
 FEATURES_CSV = "DATA/metadata/features.csv"
 Q_JSON       = "DATA/metadata/feature_quantiles.json"
 
-# ---- sensible fallbacks if no dataset yet ----
+# sensible fallbacks if no dataset yet
 DEFAULT_Q = {
     "shn": {"low": 0.44, "high": 0.58},           # shine (global_shn) 0..1
     "txt": {"med": 180.0, "high": 230.0},         # texture (global_txt) Laplacian var
     "red": {"base": 0.45, "high": 0.62},          # redness (global_red) 0..1
 }
 
-# ---------------- calibration utils ----------------
+# calibration utils 
 def _load_quantiles() -> Dict[str, Dict[str, float]]:
     """Try JSON -> CSV -> fallback defaults."""
     # 1) cached JSON
@@ -33,7 +33,7 @@ def _load_quantiles() -> Dict[str, Dict[str, float]]:
         except Exception:
             pass
 
-    # 2) compute from CSV
+    # compute from CSV
     if _PANDAS_OK and os.path.isfile(FEATURES_CSV):
         try:
             df = pd.read_csv(FEATURES_CSV)
@@ -66,12 +66,12 @@ def _load_quantiles() -> Dict[str, Dict[str, float]]:
         except Exception:
             pass
 
-    # 3) fallback
+    # fallback
     return DEFAULT_Q
 
 _Q = _load_quantiles()  # loaded at import
 
-# ---------------- math helpers ----------------
+# math 
 def _nz(v, default=0.0) -> float:
     try:
         if v is None or (isinstance(v, float) and np.isnan(v)):
@@ -86,7 +86,7 @@ def _rescale(v: float, lo: float, hi: float) -> float:
         return 0.0
     return float(np.clip((v - lo) / (hi - lo), 0.0, 1.0))
 
-# ---------------- main API ----------------
+# main API 
 def infer_skin_profile(feats: Dict[str, Any], q: Dict[str, Dict[str, float]] | None = None) -> Dict[str, Any]:
     """
     Input: feats from extract_features(...)
@@ -102,9 +102,9 @@ def infer_skin_profile(feats: Dict[str, Any], q: Dict[str, Dict[str, float]] | N
     """
     q = q or _Q
 
-    shn = _nz(feats.get("global_shn"), 0.50)   # 0..1
+    shn = _nz(feats.get("global_shn"), 0.50)   # 0.1
     txt = _nz(feats.get("global_txt"), 150.0)  # Laplacian var
-    red = _nz(feats.get("global_red"), 0.35)   # 0..1
+    red = _nz(feats.get("global_red"), 0.35)   # 0.1
 
     # Quantile-aware rescaling
     oiliness = _rescale(shn, q["shn"]["low"], q["shn"]["high"])
@@ -137,7 +137,7 @@ def infer_skin_profile(feats: Dict[str, Any], q: Dict[str, Dict[str, float]] | N
 
     # Priority list + binary flags
     prioritized = sorted(concerns_scores.items(), key=lambda kv: kv[1], reverse=True)
-    concerns = [k for k, v in prioritized if v >= 0.55][:4]  # top hits only
+    concerns = [k for k, v in prioritized if v >= 0.55][:4]  # top hiT
     flags = []
     if sensitivity >= 0.6: flags.append("sensitive")
     acne_prone = acne >= 0.6
@@ -151,7 +151,7 @@ def infer_skin_profile(feats: Dict[str, Any], q: Dict[str, Dict[str, float]] | N
         "acne_prone": bool(acne_prone),
     }
 
-# Optional: recompute & write quantiles manually
+#  recompute & write quantiles manually
 def refresh_quantiles(features_csv: str = FEATURES_CSV, out_json: str = Q_JSON) -> Tuple[bool, Dict[str, Dict[str, float]]]:
     """Recompute dataset quantiles and save JSON. Returns (ok, quantiles)."""
     if not _PANDAS_OK or not os.path.isfile(features_csv):
