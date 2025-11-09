@@ -44,7 +44,7 @@ SHINE_HIGH = 0.58
 TEXTURE_HIGH = 250.0
 TEXTURE_MED = 180.0
 
-#  small utils 
+# ----------------- small utils 
 def _safe_list(cell: Any) -> List[str]:
     if cell is None or (isinstance(cell, float) and pd.isna(cell)):
         return []
@@ -110,16 +110,60 @@ class RecEngine:
             raise FileNotFoundError(f"Knowledge base not found: {kb_path}")
         self.kb = pd.read_csv(kb_path)
 
-        # Aliases & defaults
+        # Aliases & defaults (make BOTH sides exist)
         cols = set(self.kb.columns)
+
+         # product_name / name — ensure both exist
         if "product_name" not in cols and "name" in cols:
-            self.kb["product_name"] = self.kb["name"]
+         self.kb["product_name"] = self.kb["name"]
+        if "name" not in cols and "product_name" in cols:
+          self.kb["name"] = self.kb["product_name"]
+        if "product_name" not in self.kb.columns:
+          self.kb["product_name"] = ""
+        if "name" not in self.kb.columns:
+          self.kb["name"] = ""
+
+# sku / id — ensure both exist
         if "sku" not in cols and "id" in cols:
-            self.kb["sku"] = self.kb["id"]
-        for c in ["form","usage","upsell_tier","skin_types","concerns","actives","brand","tier","category","link",
-                  "fragrance_free","comedogenicity","contra"]:
-            if c not in self.kb.columns:
-                self.kb[c] = ""
+         self.kb["sku"] = self.kb["id"]
+        if "id" not in cols and "sku" in cols:
+         self.kb["id"] = self.kb["sku"]
+        if "sku" not in self.kb.columns:
+         self.kb["sku"] = ""
+        if "id" not in self.kb.columns:
+         self.kb["id"] = ""
+
+# Ensure required-but-missing columns exist with sane defaults
+        for c in [
+    "form","usage","upsell_tier","skin_types","concerns","actives",
+    "brand","tier","category","link","fragrance_free","comedogenicity","contra"]: 
+          if c not in self.kb.columns: self.kb[c] = ""
+
+# Normalize (now safe because all columns exist)
+        for c in ["product_name","name","form","tier","brand","sku","category","usage","upsell_tier"]:
+         self.kb[c] = self.kb[c].astype(str).str.strip().str.lower()
+
+         for c in ["size_ml","price_usd","comedogenicity"]:
+           self.kb[c] = pd.to_numeric(self.kb[c], errors="coerce")
+
+        self.kb["fragrance_free"] = (
+    self.kb["fragrance_free"]
+    .fillna(0)
+    .astype(str).str.strip().str.lower()
+    .isin(["1","true","yes","y"])
+)
+
+# Parse list-like columns into sets
+        self.kb["skin_types"] = self.kb["skin_types"].map(_safe_set)
+        self.kb["concerns"]    = self.kb["concerns"].map(_safe_set)
+        self.kb["actives"]     = self.kb["actives"].map(_safe_set)
+        self.kb["contra"]      = self.kb["contra"].map(_safe_set)
+
+# Infer missing form
+        mask_missing_form = self.kb["form"].astype(str).str.strip().eq("")
+        if mask_missing_form.any():
+          self.kb.loc[mask_missing_form, "form"] = self.kb[mask_missing_form].apply(_infer_form, axis=1)
+
 
         # Normalize
         for c in ["product_name","name","form","tier","brand","sku","category","usage","upsell_tier"]:
