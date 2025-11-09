@@ -6,10 +6,13 @@ import numpy as np
 from PIL import Image
 import streamlit as st
 
+# --- page config ---
+st.set_page_config(page_title="SkinAizer — Live Analysis", page_icon="🧴", layout="wide")
+
 # --- import project modules (hot-reloadable) ---
-M       = importlib.import_module("main")
-SC      = importlib.import_module("scores")
-REMOD   = importlib.import_module("rec_engine")
+M     = importlib.import_module("main")
+SC    = importlib.import_module("scores")
+REMOD = importlib.import_module("rec_engine")
 
 # ---------- helpers ----------
 def _load_rec_engine():
@@ -19,11 +22,7 @@ def _load_rec_engine():
         return rec
 
     # Otherwise try common KB locations
-    for p in [
-        "DATA/products_kb.csv",
-        "data/interim/products_kb.csv",
-        "products_kb.csv",
-    ]:
+    for p in ["DATA/products_kb.csv", "data/interim/products_kb.csv", "products_kb.csv"]:
         if os.path.isfile(p):
             try:
                 return REMOD.RecEngine(p)
@@ -53,20 +52,38 @@ def _draw_overlay(rgb: np.ndarray, box) -> np.ndarray:
     cv2.rectangle(dbg, (x, y), (x + w, y + h), (0, 255, 0), 2)
     return dbg
 
-def _run_pipeline(image_path: str, tier: str = "Core", include_device: bool = True,
-                  max_dim: int = 900, min_side: int = 120, rec=None) -> Dict[str, Any]:
+def _run_pipeline(
+    image_path: str,
+    tier: str = "Core",
+    include_device: bool = True,
+    max_dim: int = 900,
+    min_side: int = 120,
+    rec=None,
+    flags: Dict[str, bool] | None = None
+) -> Dict[str, Any]:
     rgb = M.imread_rgb(image_path)
     rgb = M.gray_world(rgb)
 
-    # face detect
     box = M.detect_face_with_fallback(rgb, max_dim=max_dim, min_side=min_side)
     if box is None:
         return {"error": "no_face_detected"}
 
     x, y, w, h = box
-    face = rgb[y:y + h, x:x + w]
+    face = rgb[y:y+h, x:x+w]
     feats, zones = M.extract_features(face)
     profile = SC.infer_skin_profile(feats)
+
+    # --- merge UI flags into profile for RecEngine ---
+    flags = flags or {}
+    if flags.get("sensitive"):
+        # bump sensitivity so RecEngine prefers fragrance-free
+        profile.setdefault("scores", {})
+        profile["scores"]["sensitivity"] = max(profile["scores"].get("sensitivity", 0.0), 0.8)
+        profile.setdefault("flags", []).append("sensitive")
+    if flags.get("acne_prone"):
+        profile["acne_prone"] = True
+    if flags.get("pregnant"):
+        profile["pregnant"] = True
 
     # plan (RecEngine may be None)
     plan = None
@@ -102,6 +119,7 @@ def _run_pipeline(image_path: str, tier: str = "Core", include_device: bool = Tr
         "qa": qa,
         "rgb": rgb,
     }
+
 def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
     st.subheader(f"Results — {src_label}")
 
@@ -143,6 +161,15 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
     cols[3].metric("Redness",  f"{scores.get('redness', 0):.2f}")
     cols[4].metric("Texture",  f"{scores.get('texture', 0):.2f}")
 
+    # show flags
+    badges = []
+    if prof.get("acne_prone"): badges.append("acne-prone")
+    if prof.get("pregnant"): badges.append("pregnant")
+    if "sensitive" in (prof.get("flags") or []) or (scores.get("sensitivity", 0) >= 0.6):
+        badges.append("sensitive")
+    if badges:
+        st.caption("Flags: " + ", ".join(badges))
+
     with st.expander("Raw JSON (profile & features)"):
         c1, c2 = st.columns(2)
         with c1: st.json(prof)
@@ -168,6 +195,16 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
             try: line += f" · {float(size):.0f} ml"
             except Exception: line += f" · {size} ml"
         st.markdown(line)
+
+        tags = []
+        if it.get("fragrance_free"): tags.append("fragrance-free")
+        try:
+            if float(it.get("comedogenicity") or 9) <= 2:
+                tags.append("low-comedogenic")
+        except Exception:
+            pass
+        if tags: st.caption(" · ".join(tags))
+
         if it.get("reason"): st.caption(it["reason"])
 
     if reasons:
@@ -178,14 +215,18 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
                 for ln in lines: st.write("• " + ln)
 
 # ---------- UI ----------
-st.set_page_config(page_title="SkinAizer — Live Analysis", page_icon="🧴", layout="wide")
 st.title("SkinAizer — Analyze a selfie and generate a routine")
 
-# Sidebar controls
+# Sidebar controls (single consolidated block)
 with st.sidebar:
     st.header("Plan options")
     tier = st.selectbox("Plan tier", ["Starter", "Core", "Intense"], index=1)
     include_device = st.checkbox("Include device", value=True)
+
+    st.header("Profile flags")
+    flag_sensitive = st.checkbox("Sensitive", value=False, help="Prefers fragrance-free options")
+    flag_acne = st.checkbox("Acne-prone", value=False, help="Avoids high comedogenicity")
+    flag_preg = st.checkbox("Pregnant (avoid retinoids)", value=False)
 
     st.header("Detector")
     max_dim  = st.slider("Max image dimension (px)", 600, 1600, 900, step=50)
@@ -221,15 +262,26 @@ with tab1:
     left, right = st.columns([3, 1])
     with left:
         uploaded = st.file_uploader("Upload a selfie (JPG/PNG)", type=["jpg", "jpeg", "png"])
+        # (Optional) webcam capture
+        # cam_img = st.camera_input("Or use your webcam")
+
     with right:
         go_upload = st.button("Analyze uploaded", type="primary", use_container_width=True)
 
+    # Prefer file_uploader; you can add a webcam branch if you enabled it
     if go_upload and uploaded:
         with tempfile.TemporaryDirectory() as td:
             img_path = _save_uploaded(td, uploaded)
             with st.spinner("Analyzing…"):
-                out = _run_pipeline(img_path, tier=tier, include_device=include_device,
-                                    max_dim=max_dim, min_side=min_side, rec=REC)
+                out = _run_pipeline(
+                    img_path,
+                    tier=tier,
+                    include_device=include_device,
+                    max_dim=max_dim,
+                    min_side=min_side,
+                    rec=REC,
+                    flags={"sensitive": flag_sensitive, "acne_prone": flag_acne, "pregnant": flag_preg},
+                )
         if out.get("error"):
             st.error(out["error"])
         else:
@@ -249,8 +301,15 @@ with tab2:
 
             if go_dataset and picked_img:
                 with st.spinner("Analyzing…"):
-                    out = _run_pipeline(picked_img, tier=tier, include_device=include_device,
-                                        max_dim=max_dim, min_side=min_side, rec=REC)
+                    out = _run_pipeline(
+                        picked_img,
+                        tier=tier,
+                        include_device=include_device,
+                        max_dim=max_dim,
+                        min_side=min_side,
+                        rec=REC,
+                        flags={"sensitive": flag_sensitive, "acne_prone": flag_acne, "pregnant": flag_preg},
+                    )
                 if out.get("error"):
                     st.error(out["error"])
                 else:
