@@ -1,9 +1,9 @@
-id,name,brand,tier,form,skin_types,concerns,actives,size_ml,price_usd,device,include_device
-ser_niam_05,Niacinamide Serum 5%,FOREO,Core,serum,"oily,combo","redness,pore,oil",niacinamide 5%,30,19.0,,False
-ser_aha_05,Gentle AHA Exfoliant 5%,FOREO,Core,serum,"dry,combo,normal","texture,dullness",lactic acid 5%,30,22.0,,False
-ser_bha_02,BHA Serum 2%,FOREO,Core,serum,"oily,combo","clogged pores,oil",salicylic 2%,30,21.0,,False
-mos_cer,Barrier Repair Moisturizer,FOREO,Core,moisturizer,"dry,normal,combo","barrier,redness",ceramides+chol+FFA,50,28.0,,False
-spf_30,Daily Sunscreen SPF 30,FOREO,Core,spf,all,uv,UV filters,50,25.0,,False
-gel_light,Oil-Control Gel Moisturizer,FOREO,Core,moisturizer,"oily,combo","oil,shine",humectants,50,24.0,,False
-dev_luna3,LUNA 3 (device),FOREO,Device,device,all,deep cleanse,device,0,149.0,LUNA3,True
-ser_ret_01,Adapalene 0.1% (night),FOREO,Advanced,treatment,"oily,acne","acne,texture",adapalene 0.1%,15,15.0,,False
+id,sku,product_name,brand,tier,form,skin_types,concerns,actives,size_ml,price_usd,fragrance_free,comedogenicity,usage,upsell_tier,contra,include_device,link
+ser_niam_05,ser_niam_05,niacinamide serum 5%,foreo,core,serum,"oily,combo","redness,pore,oil","niacinamide",30,19.0,true,1,"am/pm",S,,false,
+ser_aha_05,ser_aha_05,gentle aha exfoliant 5%,foreo,core,exfoliant,"dry,combo,normal","texture,dullness","aha,lactic_acid",30,22.0,true,1,"pm 2–3x/week",S,,false,
+ser_bha_02,ser_bha_02,bha serum 2%,foreo,core,exfoliant,"oily,combo","clogged_pores,oil","bha,salicylic_acid",30,21.0,true,1,"pm 3x/week",S,,false,
+mos_cer,mos_cer,barrier repair moisturizer,foreo,core,moisturizer,"dry,normal,combo","barrier,redness,hydration","ceramides,cholesterol,free_fatty_acids",50,28.0,true,1,"pm (am if needed)",M,,false,
+spf_30,spf_30,daily sunscreen spf 30,foreo,core,spf,"all","uv","uv_filters",50,25.0,true,1,"am",M,,false,
+gel_light,gel_light,oil-control gel moisturizer,foreo,core,moisturizer,"oily,combo","oil,shine","humectants",50,24.0,true,1,"am/pm",S,,false,
+dev_luna3,dev_luna3,luna 3 (device),foreo,device,device,"all","deep_cleanse","device",0,149.0,true,0,"",L,,true,https://www.foreo.com/
+ser_ret_01,ser_ret_01,adapalene 0.1% (night),foreo,advanced,serum,"oily,acne","acne,texture","retinoid,adapalene",15,15.0,true,1,"pm only; start 2–3x/week",M,"retinoid_pregnancy",false,
