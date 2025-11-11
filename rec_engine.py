@@ -26,25 +26,25 @@ PLAN_TIERS = {
 
 FORMS_ORDER = ["cleanser", "serum", "moisturizer", "spf", "exfoliant", "mask", "device"]
 
-# --- photo-severity + safety knobs ---
+# photo severity + safety knobs 
 THRESH = dict(
-    need_mild=0.50,      # include when concern ≥ 0.50
-    need_strong=0.62,    # stronger push (e.g., retinoid)
-    sensitive=0.60,      # sensitivity gate (fragrance-free)
+    need_mild=0.50,      # include when bigger 0.5
+    need_strong=0.62,    # stronger push 
+    sensitive=0.60,      # sensitivity gate 
 )
-SAFE_COMEDO_MAX = 2      # acne-prone: max allowed comedogenicity (0–5)
+SAFE_COMEDO_MAX = 2      
 
 def _as_bool(x):
     s = str(x).strip().lower()
     return s in ("1","true","yes","y")
 
-# photo-driven thresholds (same as main.py)
+# photo driven same as main.py
 RED_HIGH = 0.62
 SHINE_HIGH = 0.58
 TEXTURE_HIGH = 250.0
 TEXTURE_MED = 180.0
 
-# ----------------- small utils 
+# small utils 
 def _safe_list(cell: Any) -> List[str]:
     if cell is None or (isinstance(cell, float) and pd.isna(cell)):
         return []
@@ -101,19 +101,17 @@ def _infer_form(row: pd.Series) -> str:
     if "mask" in hay: return "mask"
     return ""
 
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-#                   RecEngine
-#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#RecEngine
 class RecEngine:
 
     def __init__(self, kb_path: str = DEFAULT_KB):
         if not os.path.isfile(kb_path):
             raise FileNotFoundError(f"Knowledge base not found: {kb_path}")
             self.kb = pd.read_csv(kb_path)
-    # Aliases & defaults (make BOTH sides exist)
+    # Aliases & defaults 
         cols = set(self.kb.columns)
 
-            # product_name / name — ensure both exist
+            # product_name / name ensure both exist
         if "product_name" not in cols and "name" in cols:
             self.kb["product_name"] = self.kb["name"]
         if "name" not in cols and "product_name" in cols:
@@ -123,7 +121,7 @@ class RecEngine:
         if "name" not in self.kb.columns:
             self.kb["name"] = ""
 
-        # sku / id — ensure both exist
+        # sku / id 
         if "sku" not in cols and "id" in cols:
             self.kb["sku"] = self.kb["id"]
         if "id" not in cols and "sku" in cols:
@@ -133,13 +131,13 @@ class RecEngine:
         if "id" not in self.kb.columns:
             self.kb["id"] = ""
 
-    # Ensure required-but-missing columns exist with sane defaults
+    # Ensure required
         for c in [
         "form","usage","upsell_tier","skin_types","concerns","actives",
         "brand","tier","category","link","fragrance_free","comedogenicity","contra"]: 
             if c not in self.kb.columns: self.kb[c] = ""
 
-    # Normalize (now safe because all columns exist)
+    # Normalize 
             for c in ["product_name","name","form","tier","brand","sku","category","usage","upsell_tier"]:
              self.kb[c] = self.kb[c].astype(str).str.strip().str.lower()
 
@@ -153,7 +151,7 @@ class RecEngine:
         .isin(["1","true","yes","y"])
     )
 
-    # Parse list-like columns into sets
+    # list-like columns 
             self.kb["skin_types"] = self.kb["skin_types"].map(_safe_set)
             self.kb["concerns"]    = self.kb["concerns"].map(_safe_set)
             self.kb["actives"]     = self.kb["actives"].map(_safe_set)
@@ -183,9 +181,9 @@ class RecEngine:
             if mask_missing_form.any():
                 self.kb.loc[mask_missing_form, "form"] = self.kb[mask_missing_form].apply(_infer_form, axis=1)
     
-        # ---------- severity weights from profile.scores (+ mapping to KB tokens) ----------
+        # severity weights from profile.scores 
     def _weights(self, profile: Dict[str, Any]) -> Dict[str, float]:
-            # profile['scores'] keys come from scores.py: oiliness, dryness, redness, texture, sensitivity
+            
             s = {k: float(v) for k, v in (profile.get("scores") or {}).items()}
             w: Dict[str, float] = {}
 
@@ -197,11 +195,10 @@ class RecEngine:
             w["hydration"] = s.get("dryness", 0.0)
             w["barrier"] = max(s.get("dryness", 0.0) * 0.7, s.get("sensitivity", 0.0) * 0.3)
             w["sensitivity"] = s.get("sensitivity", 0.0)
-            w["uv"] = 0.5  # always useful baseline
+            w["uv"] = 0.5  
 
-            # Also honor prioritized_concerns from profile (list of tuples)
             for c, val in (profile.get("prioritized_concerns") or []):
-                # map 'oil_control' -> 'oil'
+        
                 if c == "oil_control":
                     c = "oil"
                 w[c] = max(w.get(c, 0.0), float(val))
@@ -212,7 +209,7 @@ class RecEngine:
         """Compatibility wrapper: keep your original name, but base it on _weights() and add a few direct photo nudges."""
         w = self._weights(profile)
 
-        # Direct nudges from raw feats (keeps your earlier behavior)
+        # Direct nudges raw
         if feats.get("global_shn", 0) > SHINE_HIGH:
             w["acne"] = max(w.get("acne", 0.0), 0.9)
         if feats.get("global_txt", 0) > TEXTURE_HIGH:
@@ -236,7 +233,7 @@ class RecEngine:
         st = profile.get("skin_type", "")
         weights = self._concern_weights(profile, feats)
 
-        # Form baseline to separate roles
+    
         base_by_form = {"serum":0.90,"moisturizer":0.85,"spf":0.80,"cleanser":0.60,"exfoliant":0.55,"mask":0.30,"device":0.25,"treatment":0.90}
         form = str(row.get("form","")).lower()
         score = base_by_form.get(form, 0.40)
@@ -245,7 +242,7 @@ class RecEngine:
         if _covers_skin_type(set(row["skin_types"]), st):
             score += 0.40
         elif row["skin_types"]:
-            score -= 0.10  # explicit mismatch
+            score -= 0.10 
 
         # Severity from image/profile
         sev = self._severity_for_row(row, weights)  # 0..1
@@ -256,7 +253,7 @@ class RecEngine:
         if sensitivity >= THRESH["sensitive"] and not bool(row.get("fragrance_free", False)):
             score -= 0.50
 
-        # derive acne-prone from oiliness/texture if user didn't set a flag
+        # derive acne from oiliness/texture 
         acne_prone = bool(profile.get("acne_prone")) or (weights.get("oil",0) >= 0.65) or (weights.get("clogged_pores",0) >= 0.65)
         try:
             if acne_prone and float(row.get("comedogenicity") or 0) > SAFE_COMEDO_MAX:
@@ -265,9 +262,9 @@ class RecEngine:
             pass
 
         if profile.get("pregnant", False) and ("retinoid_pregnancy" in (row.get("contra") or set())):
-            score -= 9.0  # hard block
+            score -= 9.0  
 
-        # Synergy with actives and photo signals
+        # Synergy
         acts = set(row.get("actives") or set())
         if feats.get("global_red",0) > RED_HIGH and ({"niacinamide","azelaic_acid"} & acts):
             score += 0.20
@@ -299,13 +296,13 @@ class RecEngine:
             except Exception:
                 return 0.0
 
-    # --------------------------- main API ---------------------------
+    #main API
     def recommend(self, feats: dict, profile: dict, tier: str = "Core", include_device: bool = True, top_k_per_type: int = 1) -> dict:
         tier = tier if tier in PLAN_TIERS else "Core"
         cfg = PLAN_TIERS[tier]
         target_weeks = cfg["weeks"]; prefer_upsell = cfg["upsell"]; need = dict(cfg["need"])
 
-        # If photo QA failed, do not prescribe (UI will show reasons)
+       
         if int(feats.get("qa_fail", 0)) == 1:
             issues = feats.get("qa_issues", "")
             return dict(plan="QA only", target_weeks=0, skin_type=None, top_concerns=[],
@@ -314,11 +311,11 @@ class RecEngine:
         kb = self.kb.copy()
         stype = profile.get("skin_type","")
 
-        # Soft filter by skin type
+     
         if stype:
             kb = kb[kb["skin_types"].map(lambda s: (len(s)==0) or (stype in s) or ("all" in s) or (stype=="combo" and ("normal" in s or "combo" in s)))]
 
-        # Score per-row
+      
         kb["__score"] = kb.apply(lambda r: self._score_row(r, profile, feats), axis=1)
 
         by_type: Dict[str, List[Dict[str, Any]]] = {}
@@ -341,7 +338,7 @@ class RecEngine:
             chosen_rows = cand.head(max(1, k))
             chosen, why = [], []
             for _, row in chosen_rows.iterrows():
-                # sizes to choose from: same product name (preferred) then same SKU family
+                
                 same_name = self.kb["product_name"] == row.get("product_name", "")
                 sizes_by_name = [float(x) for x in self.kb.loc[same_name, "size_ml"].dropna().tolist()]
                 if sizes_by_name:
@@ -371,10 +368,10 @@ class RecEngine:
                     fragrance_free=bool(row.get("fragrance_free", False)),
                     comedogenicity=float(row.get("comedogenicity") or 0.0),
                     actives=list(row.get("actives") or []),
-                    reason="",  # filled by human-readable lines below (for old-UI compatibility)
+                    reason="", 
                 ))
 
-                # human reason lines that reference the photo severity
+         
                 rlines = []
                 top = sorted(weights.items(), key=lambda kv: kv[1], reverse=True)[:2]
                 if fform in ("serum","treatment"):
@@ -392,29 +389,23 @@ class RecEngine:
                     reasons.setdefault(fform, []).extend(rlines)
                     chosen[-1]["reason"] = "; ".join(rlines)
 
-                # always include numeric score for debugging
                 reasons.setdefault(fform, []).append(f"{row.get('product_name','')} → score {row['__score']:.2f}")
 
-            # keep only top_k_per_type if requested
             by_type[forms[0] if isinstance(form, str) else forms[0]] = chosen[:max(1, top_k_per_type)]
 
-        # Required forms
         for f, k in need.items():
             pick_for(f, k, min_score=0.0)
 
-        # Extras based on photo severity (oil OR texture)
         if max(weights.get("texture",0), weights.get("oil",0)) >= THRESH["need_mild"]:
             pick_for("exfoliant", 1, extra_filter=lambda df: self._pick_exfoliant_candidates(df, weights))
 
         if include_device:
             pick_for("device", 1)
 
-        # Flatten items in a stable order
         items: List[Dict[str, Any]] = []
         for f in FORMS_ORDER:
             items += by_type.get(f, [])
 
-        # Top concerns for header
         top_concerns = sorted(weights.keys(), key=lambda c: weights[c], reverse=True)[:3]
 
         return dict(
