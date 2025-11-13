@@ -1,8 +1,7 @@
-streamlit
+streamlit>=1.38
+torch==2.2.1
+ultralytics==8.3.0
+opencv-python-headless==4.10.0.84
+numpy
 pillow
-numpy<2
 pandas
-scikit-learn
-joblib
-opencv-python-headless
-watchdog
