@@ -10,7 +10,7 @@ import streamlit as st
 from core.model_core import skinaizer_model_core
 
 # page config 
-st.set_page_config(page_title="SkinAizer — Live Analysis", page_icon="🧴", layout="wide")
+st.set_page_config(page_title="SkinAizer", page_icon="🧴", layout="wide")
 
 # import project modules (hot-reloadable)
 M     = importlib.import_module("main")
@@ -187,7 +187,7 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
         issues = qa.get("issues") or "too_dark/too_bright"
         st.warning(f"⚠️ Retake suggested — {issues}")
     else:
-        st.success("✅ PASS — good photo quality")
+        st.success("✅ PASS - good photo quality")
 
     # timings
     timings = out.get("timings") or {}
