@@ -2,9 +2,12 @@
 import os, io, json, tempfile, importlib
 from pathlib import Path
 from typing import Dict, Any, List
+
 import numpy as np
 from PIL import Image
 import streamlit as st
+
+from core.model_core import skinaizer_model_core
 
 # --- page config ---
 st.set_page_config(page_title="SkinAizer — Live Analysis", page_icon="🧴", layout="wide")
@@ -30,6 +33,7 @@ def _load_rec_engine():
                 pass
     return None
 
+
 def _list_images(root: str) -> List[str]:
     res = []
     for base, _, files in os.walk(root):
@@ -38,6 +42,7 @@ def _list_images(root: str) -> List[str]:
                 res.append(os.path.join(base, f))
     return sorted(res)
 
+
 def _save_uploaded(tmp_dir: str, uf) -> str:
     ext = os.path.splitext(uf.name)[1].lower() or ".jpg"
     out = os.path.join(tmp_dir, f"upload{ext}")
@@ -45,12 +50,14 @@ def _save_uploaded(tmp_dir: str, uf) -> str:
         f.write(uf.getbuffer())
     return out
 
+
 def _draw_overlay(rgb: np.ndarray, box) -> np.ndarray:
     import cv2
     x, y, w, h = box
     dbg = rgb.copy()
     cv2.rectangle(dbg, (x, y), (x + w, y + h), (0, 255, 0), 2)
     return dbg
+
 
 def _run_pipeline(
     image_path: str,
@@ -61,15 +68,41 @@ def _run_pipeline(
     rec=None,
     flags: Dict[str, bool] | None = None
 ) -> Dict[str, Any]:
+    import time
+
+    # --- total timing start ---
+    t_total0 = time.perf_counter()
+
+    # 1) load + base preproc (existing logic)
     rgb = M.imread_rgb(image_path)
     rgb = M.gray_world(rgb)
 
-    box = M.detect_face_with_fallback(rgb, max_dim=max_dim, min_side=min_side)
+    # 2) YOLO-based detection via model_core
+    core_out = skinaizer_model_core(rgb)
+    yolo_bbox = core_out.get("bbox")
+    timings = core_out.get("timings", {}).copy()
+
+    # 3) Convert YOLO bbox -> (x, y, w, h) or fallback to old detector
+    if yolo_bbox is not None:
+        x_min, y_min, x_max, y_max = yolo_bbox
+        x = x_min
+        y = y_min
+        w = x_max - x_min
+        h = y_max - y_min
+        box = (x, y, w, h)
+    else:
+        # fallback to original detector if YOLO fails
+        box = M.detect_face_with_fallback(rgb, max_dim=max_dim, min_side=min_side)
+
     if box is None:
         return {"error": "no_face_detected"}
 
     x, y, w, h = box
-    face = rgb[y:y+h, x:x+w]
+
+    # 4) crop face ROI (as before)
+    face = rgb[y:y + h, x:x + w]
+
+    # 5) feature extraction + profile (existing logic)
     feats, zones = M.extract_features(face)
     profile = SC.infer_skin_profile(feats)
 
@@ -110,6 +143,10 @@ def _run_pipeline(
         "mean_gray": float(feats.get("qa_mean_gray", 0)),
     }
 
+    # --- total timing end ---
+    t_total1 = time.perf_counter()
+    timings["total_pipeline_ms"] = (t_total1 - t_total0) * 1000.0
+
     return {
         "box": [int(x), int(y), int(w), int(h)],
         "features": feats,
@@ -118,7 +155,9 @@ def _run_pipeline(
         "debug_bytes": dbg_bytes,
         "qa": qa,
         "rgb": rgb,
+        "timings": timings,
     }
+
 
 def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
     st.subheader(f"Results — {src_label}")
@@ -150,6 +189,12 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
     else:
         st.success("✅ PASS — good photo quality")
 
+    # -------- timings (if available) --------
+    timings = out.get("timings") or {}
+    if timings:
+        pretty = ", ".join(f"{k}={v:.1f} ms" for k, v in timings.items())
+        st.caption(f"Model timings: {pretty}")
+
     # -------- profile metrics --------
     st.markdown("### Skin profile")
     prof = out.get("profile", {}) or {}
@@ -163,8 +208,10 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
 
     # show flags
     badges = []
-    if prof.get("acne_prone"): badges.append("acne-prone")
-    if prof.get("pregnant"): badges.append("pregnant")
+    if prof.get("acne_prone"):
+        badges.append("acne-prone")
+    if prof.get("pregnant"):
+        badges.append("pregnant")
     if "sensitive" in (prof.get("flags") or []) or (scores.get("sensitivity", 0) >= 0.6):
         badges.append("sensitive")
     if badges:
@@ -172,15 +219,19 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
 
     with st.expander("Raw JSON (profile & features)"):
         c1, c2 = st.columns(2)
-        with c1: st.json(prof)
-        with c2: st.json(out.get("features", {}))
+        with c1:
+            st.json(prof)
+        with c2:
+            st.json(out.get("features", {}))
 
     # -------- plan & reasons --------
     plan = out.get("plan")
     if not plan:
-        st.info("No plan (RecEngine not loaded)."); return
+        st.info("No plan (RecEngine not loaded).")
+        return
     if "error" in plan:
-        st.error(plan["error"]); return
+        st.error(plan["error"])
+        return
 
     st.markdown(f"### Suggested routine — {plan.get('plan', 'Core')}")
     reasons = plan.get("reasons") or {}
@@ -192,27 +243,35 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
         size = it.get("size_ml")
         line = f"- **{name}** — *{form}*"
         if size:
-            try: line += f" · {float(size):.0f} ml"
-            except Exception: line += f" · {size} ml"
+            try:
+                line += f" · {float(size):.0f} ml"
+            except Exception:
+                line += f" · {size} ml"
         st.markdown(line)
 
         tags = []
-        if it.get("fragrance_free"): tags.append("fragrance-free")
+        if it.get("fragrance_free"):
+            tags.append("fragrance-free")
         try:
             if float(it.get("comedogenicity") or 9) <= 2:
                 tags.append("low-comedogenic")
         except Exception:
             pass
-        if tags: st.caption(" · ".join(tags))
+        if tags:
+            st.caption(" · ".join(tags))
 
-        if it.get("reason"): st.caption(it["reason"])
+        if it.get("reason"):
+            st.caption(it["reason"])
 
     if reasons:
         st.caption("Why these picks:")
         for f, lines in reasons.items():
-            if not lines: continue
+            if not lines:
+                continue
             with st.expander(f"{f} rationale"):
-                for ln in lines: st.write("• " + ln)
+                for ln in lines:
+                    st.write("• " + ln)
+
 
 # ---------- UI ----------
 st.title("SkinAizer — Analyze a selfie and generate a routine")
@@ -235,7 +294,9 @@ with st.sidebar:
     st.header("Dev")
     if st.button("Reload modules"):
         try:
-            importlib.reload(M); importlib.reload(SC); importlib.reload(REMOD)
+            importlib.reload(M)
+            importlib.reload(SC)
+            importlib.reload(REMOD)
             st.success("Modules reloaded.")
         except Exception as e:
             st.error(f"Reload failed: {e}")
