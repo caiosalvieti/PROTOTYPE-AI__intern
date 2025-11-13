@@ -19,7 +19,6 @@ def _detect_largest_box_xyxy(img_rgb: np.ndarray) -> Optional[Tuple[int, int, in
     Run YOLO on an RGB image and return the largest bbox as (x_min, y_min, x_max, y_max)
     in the ORIGINAL image coordinate system.
     """
-    # YOLO expects BGR or RGB np arrays; we keep your image as RGB here
     results = _YOLO_MODEL.predict(
         img_rgb,
         conf=0.25,
@@ -59,7 +58,7 @@ def skinaizer_model_core(img_rgb: np.ndarray) -> Dict[str, Any]:
 
     timings = {
         "yolo_ms": (t1 - t0) * 1000.0,
-        "total_ms": (t1 - t0) * 1000.0,  # for now total == yolo; you can extend later
+        "total_ms": (t1 - t0) * 1000.0,  
     }
 
     return {

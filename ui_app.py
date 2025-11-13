@@ -9,15 +9,15 @@ import streamlit as st
 
 from core.model_core import skinaizer_model_core
 
-# --- page config ---
+# page config 
 st.set_page_config(page_title="SkinAizer — Live Analysis", page_icon="🧴", layout="wide")
 
-# --- import project modules (hot-reloadable) ---
+# import project modules (hot-reloadable)
 M     = importlib.import_module("main")
 SC    = importlib.import_module("scores")
 REMOD = importlib.import_module("rec_engine")
 
-# ---------- helpers ----------
+# helpers 
 def _load_rec_engine():
     # Prefer the shared instance from main.py if it exists and is of correct type
     rec = getattr(M, "REC_ENGINE", None)
@@ -70,7 +70,7 @@ def _run_pipeline(
 ) -> Dict[str, Any]:
     import time
 
-    # --- total timing start ---
+    #  total timing start 
     t_total0 = time.perf_counter()
 
     # 1) load + base preproc (existing logic)
@@ -106,7 +106,7 @@ def _run_pipeline(
     feats, zones = M.extract_features(face)
     profile = SC.infer_skin_profile(feats)
 
-    # --- merge UI flags into profile for RecEngine ---
+    # merge UI flags into profile for RecEngine 
     flags = flags or {}
     if flags.get("sensitive"):
         # bump sensitivity so RecEngine prefers fragrance-free
@@ -143,7 +143,7 @@ def _run_pipeline(
         "mean_gray": float(feats.get("qa_mean_gray", 0)),
     }
 
-    # --- total timing end ---
+    # total timing end 
     t_total1 = time.perf_counter()
     timings["total_pipeline_ms"] = (t_total1 - t_total0) * 1000.0
 
@@ -162,7 +162,7 @@ def _run_pipeline(
 def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
     st.subheader(f"Results — {src_label}")
 
-    # -------- image(s) --------
+    # images
     col_img, col_overlay = st.columns(2)
 
     # show original image (path vs UploadedFile)
@@ -181,7 +181,7 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
         except Exception:
             pass
 
-    # -------- QA badge --------
+    # QA badge 
     qa = out.get("qa", {}) or {}
     if qa.get("fail"):
         issues = qa.get("issues") or "too_dark/too_bright"
@@ -189,13 +189,13 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
     else:
         st.success("✅ PASS — good photo quality")
 
-    # -------- timings (if available) --------
+    # timings
     timings = out.get("timings") or {}
     if timings:
         pretty = ", ".join(f"{k}={v:.1f} ms" for k, v in timings.items())
         st.caption(f"Model timings: {pretty}")
 
-    # -------- profile metrics --------
+    # profile metrics 
     st.markdown("### Skin profile")
     prof = out.get("profile", {}) or {}
     scores = prof.get("scores", {}) or {}
@@ -224,7 +224,7 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
         with c2:
             st.json(out.get("features", {}))
 
-    # -------- plan & reasons --------
+    # plan & reasons 
     plan = out.get("plan")
     if not plan:
         st.info("No plan (RecEngine not loaded).")
@@ -273,8 +273,8 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
                     st.write("• " + ln)
 
 
-# ---------- UI ----------
-st.title("SkinAizer — Analyze a selfie and generate a routine")
+# UI 
+st.title("SkinAizer: From a Selfie to your daily SkinCare")
 
 # Sidebar controls (single consolidated block)
 with st.sidebar:
@@ -322,7 +322,7 @@ tab1, tab2 = st.tabs(["Upload", "Pick from dataset"])
 with tab1:
     left, right = st.columns([3, 1])
     with left:
-        uploaded = st.file_uploader("Upload a selfie (JPG/PNG)", type=["jpg", "jpeg", "png"])
+        uploaded = st.file_uploader("Upload your selfie (JPG/PNG)", type=["jpg", "jpeg", "png"])
         # (Optional) webcam capture
         # cam_img = st.camera_input("Or use your webcam")
 

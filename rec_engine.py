@@ -101,7 +101,7 @@ def _infer_form(row: pd.Series) -> str:
     if "mask" in hay: return "mask"
     return ""
 
-# ========================= RecEngine =========================
+# RecEngine 
 class RecEngine:
     def __init__(self, kb_path: str = DEFAULT_KB):
         if not os.path.isfile(kb_path):
@@ -158,7 +158,7 @@ class RecEngine:
         # Commit
         self.kb = kb
 
-    # --- scalar guard for scoring (prevents multi-column assignment errors) ---
+    # scalar guard for scoring (prevents multi-column assignment errors) 
     def _to_float(self, v) -> float:
         try:
             return float(v)
@@ -261,7 +261,7 @@ class RecEngine:
         else:
             return kb[(kb["form"] == "exfoliant") & kb["actives"].fillna("").astype(str).str.contains(r"\baha\b|\bpha\b|lactic|mandelic", regex=True)]
 
-    # --------------------------- main API ---------------------------
+    #  main API 
     def recommend(self, feats: dict, profile: dict, tier: str = "Core", include_device: bool = True, top_k_per_type: int = 1) -> dict:
         tier = tier if tier in PLAN_TIERS else "Core"
         cfg = PLAN_TIERS[tier]

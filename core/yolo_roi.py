@@ -5,7 +5,7 @@ from ultralytics import YOLO
 import torch
 
 
-DEFAULT_YOLO_WEIGHTS = "yolov8n.pt"  # you can swap to a custom face/skin model later
+DEFAULT_YOLO_WEIGHTS = "yolov8n.pt"  
 
 
 def _get_device():
@@ -15,11 +15,7 @@ def _get_device():
 
 
 class YoloRoiDetector:
-    """
-    Simple wrapper around Ultralytics YOLO to return ONE ROI bbox for a face/skin area.
-    For now: picks the largest box (or you can filter by class_id later).
-    """
-
+ 
     def __init__(
         self,
         weights: str = DEFAULT_YOLO_WEIGHTS,
@@ -54,8 +50,7 @@ class YoloRoiDetector:
         xyxy = boxes.xyxy.cpu().numpy()
         cls = boxes.cls.cpu().numpy().astype(int)
 
-        # TODO (later): filter by specific class id (e.g. "person" or "face")
-        # For now: simply choose the largest box by area
+        # TODO 
         areas = (xyxy[:, 2] - xyxy[:, 0]) * (xyxy[:, 3] - xyxy[:, 1])
         idx = int(areas.argmax())
         x_min, y_min, x_max, y_max = xyxy[idx]
