@@ -5,4 +5,4 @@ opencv-python-headless
 numpy
 pillow
 pandas
-scikit-learn==1.5.2
+scikit-learn
