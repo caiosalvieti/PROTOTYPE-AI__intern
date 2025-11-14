@@ -167,19 +167,18 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
 
     # show original image (path vs UploadedFile)
     if isinstance(img_source, str):
-        col_img.image(img_source, caption=os.path.basename(img_source), use_container_width=True)
+        col_img.image(img_source, caption=os.path.basename(img_source), width="stretch")
     else:
-        col_img.image(img_source, caption="Uploaded", use_container_width=True)
-
-    # overlay (from debug panel if present, else draw rectangle)
+        col_img.image(img_source, caption="Uploaded", width="stretch")
     if out.get("debug_bytes"):
-        col_overlay.image(out["debug_bytes"], caption="Debug panel (face + zones)", use_container_width=True)
+        col_overlay.image(out["debug_bytes"], caption="Debug panel (face + zones)", width="stretch")
     else:
         try:
             dbg = _draw_overlay(out["rgb"], out["box"])
-            col_overlay.image(dbg, caption="Detection overlay", use_column_width=True)
+            col_overlay.image(dbg, caption="Detection overlay", width="stretch")
         except Exception:
             pass
+
 
     # QA badge 
     qa = out.get("qa", {}) or {}
