@@ -167,13 +167,13 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
 
     # show original image (path vs UploadedFile)
     if isinstance(img_source, str):
-        col_img.image(img_source, caption=os.path.basename(img_source), use_column_width=True)
+        col_img.image(img_source, caption=os.path.basename(img_source), use_container_width=True)
     else:
-        col_img.image(img_source, caption="Uploaded", use_column_width=True)
+        col_img.image(img_source, caption="Uploaded", use_container_width=True)
 
     # overlay (from debug panel if present, else draw rectangle)
     if out.get("debug_bytes"):
-        col_overlay.image(out["debug_bytes"], caption="Debug panel (face + zones)", use_column_width=True)
+        col_overlay.image(out["debug_bytes"], caption="Debug panel (face + zones)", use_container_width=True)
     else:
         try:
             dbg = _draw_overlay(out["rgb"], out["box"])
