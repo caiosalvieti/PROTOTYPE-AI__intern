@@ -4,7 +4,8 @@ from typing import Dict, Any, Optional, Tuple
 
 import time
 import numpy as np
-
+import os
+os.environ.setdefault("YOLO_CONFIG_DIR", "/tmp/Ultralytics")
 # Flags so we can run without YOLO if import fails
 YOLO_AVAILABLE: bool = False
 YOLO_IMPORT_ERROR: Optional[str] = None
