@@ -6,18 +6,14 @@ import numpy as np
 from ultralytics import YOLO
 import torch
 import time
-
+import sys
 # --- INTEGRAÇÃO CRÍTICA DE CAMINHO ---
 # Sobe dois níveis (sai do .py, sai da pasta core/) para chegar na raiz do projeto
 ROOT = Path(__file__).resolve().parent.parent 
 DEFAULT_YOLO_WEIGHTS_PATH = str(ROOT / "yolov8n.pt") 
-
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
 # --- Importa Pre-Processamento ---
-# Importação relativa, ajustada se necessário, dependendo de como você estrutura.
-# Se preprocessing.py está na raiz, use 'import preprocessing as pp' e ajuste o path.
-# Se estiver na pasta core/, use 'from . import preprocessing as pp' (mais complexo para rodar direto)
-# Para fins de demonstração, assumimos que está importando o módulo raiz.
-# Se 'preprocessing' não for reconhecido, ajuste para o seu caminho real.
 import preprocessing as pp # <-- ASSUMIMOS QUE ESTE IMPORT FUNCIONA NO SEU AMBIENTE
 
 DEFAULT_YOLO_WEIGHTS = DEFAULT_YOLO_WEIGHTS_PATH  
