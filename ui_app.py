@@ -20,6 +20,7 @@ M     = importlib.import_module("main")
 SC    = importlib.import_module("scores")
 REMOD = importlib.import_module("rec_engine")
 
+TARGET_SIZE = (640, 640)
 
 # --- FUNÇÕES DE CACHE (OBJETOS PESADOS) ---
 
@@ -94,8 +95,8 @@ def _run_pipeline(
     flags: Dict[str, bool] | None = None
 ) -> Dict[str, Any]:
     import time
-    from core.yolo_roi import TARGET_SIZE # Importar o tamanho alvo (640, 640)
-
+    #from core.yolo_roi import TARGET_SIZE # Importar o tamanho alvo (640, 640)
+    W_proc, H_proc = TARGET_SIZE
     # Carrega a função de inferência do Core (agora cacheada)
     core_model_func = _load_skinaizer_core_model()
     
