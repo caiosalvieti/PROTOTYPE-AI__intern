@@ -84,7 +84,6 @@ def _draw_overlay(rgb: np.ndarray, box) -> np.ndarray:
 
 
 # streamlit_app.py - SUBSTITUA ESTA FUNÇÃO:
-
 def _run_pipeline(
     image_path: str,
     tier: str = "Core",
@@ -95,20 +94,29 @@ def _run_pipeline(
     flags: Dict[str, bool] | None = None
 ) -> Dict[str, Any]:
     import time
-    #from core.yolo_roi import TARGET_SIZE # Importar o tamanho alvo (640, 640)
-    W_proc, H_proc = TARGET_SIZE
+
+    # 🎯 CORREÇÃO: Variável TARGET_SIZE e inicialização de resultados
+    # Definimos 640, 640 diretamente ou importamos de core.preprocessing
+    # Para simplicidade, definimos aqui, já que é o valor padrão do YOLOv8.
+    W_proc, H_proc = 640, 640
+    
+    feats = {} # Inicializa para garantir que o return final não falhe
+    zones = {}
+    plan = None
+    qa = {}
+    dbg_bytes = None
+    
     # Carrega a função de inferência do Core (agora cacheada)
     core_model_func = _load_skinaizer_core_model()
     
-    #  total timing start 
     t_total0 = time.perf_counter()
 
-    # 1) load + base preproc (existing logic)
+    # 1) load + base preproc
     rgb = M.imread_rgb(image_path)
     H_orig, W_orig = rgb.shape[:2] # <-- CAPTURA AS DIMENSÕES ORIGINAIS
     rgb = M.gray_world(rgb)
 
-    # 2) YOLO-based detection via função cacheada (Detector roda em 640x640)
+    # 2) YOLO-based detection
     core_out = core_model_func(rgb)
     yolo_bbox = core_out.get("bbox")
     timings = core_out.get("timings", {}).copy()
@@ -116,16 +124,12 @@ def _run_pipeline(
     # 3) Convert YOLO bbox -> (x, y, w, h) e RESCALONA, ou fallback
     if yolo_bbox is not None:
         
-        # --- CORREÇÃO: RESCALONAMENTO DE COORDENADAS ---
-        W_proc, H_proc = 640, 640 # TARGET_SIZE de preprocessing.py
-        
+        # --- RESCALONAMENTO DE COORDENADAS ---
         x_min_proc, y_min_proc, x_max_proc, y_max_proc = yolo_bbox
         
-        # Fatores de escala (Original / Processado)
         scale_w = W_orig / W_proc
         scale_h = H_orig / H_proc
 
-        # Rescalona as coordenadas de 640x640 de volta para o tamanho original
         x_min = int(x_min_proc * scale_w)
         y_min = int(y_min_proc * scale_h)
         x_max = int(x_max_proc * scale_w)
@@ -141,18 +145,54 @@ def _run_pipeline(
         # fallback to original detector if YOLO fails
         box = M.detect_face_with_fallback(rgb, max_dim=max_dim, min_side=min_side)
 
+    # 🛑 CHECAGEM CRÍTICA: Se a detecção falhar, retorne aqui.
     if box is None:
         return {"error": "no_face_detected"}
 
-    # ... (resto do código do pipeline permanece inalterado) ...
-    # O pipeline continua a usar a variável 'box' (agora corretamente escalada)
+    # ⬇️ CONTINUAÇÃO DO PIPELINE (Se a detecção foi bem-sucedida) ⬇️
     
     x, y, w, h = box
 
-    # 4) crop face ROI (as before)
+    # 4) crop face ROI
     face = rgb[y:y + h, x:x + w]
-    
-    # ... (O restante da função _run_pipeline) ...
+
+    # 5) feature extraction + profile (ESTE BLOCO DEFINE 'feats')
+    feats, zones = M.extract_features(face)
+    profile = SC.infer_skin_profile(feats) # <-- 'profile' também precisa ser definido aqui
+
+    # merge UI flags into profile for RecEngine (mantido do seu código original)
+    flags = flags or {}
+    if flags.get("sensitive"):
+        profile.setdefault("scores", {})
+        profile["scores"]["sensitivity"] = max(profile["scores"].get("sensitivity", 0.0), 0.8)
+        profile.setdefault("flags", []).append("sensitive")
+    if flags.get("acne_prone"):
+        profile["acne_prone"] = True
+    if flags.get("pregnant"):
+        profile["pregnant"] = True
+
+    # plan (RecEngine may be None)
+    if rec is not None:
+        try:
+            plan = rec.recommend(feats, profile, tier=tier, include_device=include_device)
+        except Exception as e:
+            plan = {"error": f"rec_engine_error: {e}"}
+
+    # debug panel bytes
+    try:
+        with tempfile.TemporaryDirectory() as td_dbg:
+            dbg_path = os.path.join(td_dbg, "debug.jpg")
+            M.save_debug_panel(rgb, box, zones, dbg_path)
+            with open(dbg_path, "rb") as f:
+                dbg_bytes = f.read()
+    except Exception:
+        pass
+
+    qa = {
+        "fail": bool(feats.get("qa_fail", 0)),
+        "issues": feats.get("qa_issues", ""),
+        "mean_gray": float(feats.get("qa_mean_gray", 0)),
+    }
 
     # total timing end 
     t_total1 = time.perf_counter()
