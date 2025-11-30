@@ -1,9 +1,9 @@
 # yolo_roi.py
 from typing import Optional, Tuple
+from pathlib import Path  # <-- Novo Importe
 import numpy as np
 from ultralytics import YOLO
 import torch
-
 
 DEFAULT_YOLO_WEIGHTS = "yolov8n.pt"  
 
@@ -18,13 +18,16 @@ class YoloRoiDetector:
  
     def __init__(
         self,
-        weights: str = DEFAULT_YOLO_WEIGHTS,
+        # Use o caminho absoluto como default
+        weights: str = DEFAULT_YOLO_WEIGHTS_PATH, # <-- CORREÇÃO AQUI
         conf: float = 0.25,
         iou: float = 0.45,
         device: Optional[str] = None,
     ):
         self.device = device if device is not None else _get_device()
-        self.model = YOLO(weights)
+        
+        # O self.model agora carrega o modelo do caminho absoluto
+        self.model = YOLO(weights) 
         self.conf = conf
         self.iou = iou
 
