@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_YOLO_WEIGHTS_PATH = str(ROOT / "yolov8n.pt") 
 
 # --- Importa Pre-Processamento ---
-import preprocessing as pp # <-- ASSUMIMOS QUE ESTE IMPORT FUNCIONA NO SEU AMBIENTE
+from . import preprocessing as pp 
 
 DEFAULT_YOLO_WEIGHTS = DEFAULT_YOLO_WEIGHTS_PATH  
 
