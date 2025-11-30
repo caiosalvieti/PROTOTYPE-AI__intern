@@ -6,8 +6,22 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-import cv2
+import logging
 
+try:
+    import cv2
+except ImportError as e:
+    cv2 = None
+    logging.error(
+        "Failed to import OpenCV (cv2). Make sure 'opencv-python-headless' "
+        "is installed and 'opencv-python' is not in requirements.txt. "
+        f"Original error: {e}"
+    )
+if cv2 is None:
+    raise RuntimeError(
+        "OpenCV is not available in this deployment. "
+        "Please fix dependencies (use opencv-python-headless)."
+    )
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import f1_score, balanced_accuracy_score, roc_auc_score
 from sklearn.ensemble import RandomForestClassifier
