@@ -18,7 +18,13 @@ SC    = importlib.import_module("scores")
 REMOD = importlib.import_module("rec_engine")
 
 # helpers 
+@st.cache_resource
 def _load_rec_engine():
+    """
+    Carrega e inicializa o RecEngine. Usamos st.cache_resource
+    para garantir que a leitura e parsing do products_kb.csv
+    ocorra apenas uma vez.
+    """
     # Prefer the shared instance from main.py if it exists and is of correct type
     rec = getattr(M, "REC_ENGINE", None)
     if rec is not None and isinstance(rec, REMOD.RecEngine):
@@ -28,6 +34,7 @@ def _load_rec_engine():
     for p in ["DATA/products_kb.csv", "data/interim/products_kb.csv", "products_kb.csv"]:
         if os.path.isfile(p):
             try:
+                # Note: REMOD is the imported rec_engine module
                 return REMOD.RecEngine(p)
             except Exception:
                 pass
