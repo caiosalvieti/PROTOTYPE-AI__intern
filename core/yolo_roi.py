@@ -11,8 +11,7 @@ import sys
 # Sobe dois níveis (sai do .py, sai da pasta core/) para chegar na raiz do projeto
 ROOT = Path(__file__).resolve().parent.parent 
 DEFAULT_YOLO_WEIGHTS_PATH = str(ROOT / "yolov8n.pt") 
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))
+
 # --- Importa Pre-Processamento ---
 import preprocessing as pp # <-- ASSUMIMOS QUE ESTE IMPORT FUNCIONA NO SEU AMBIENTE
 
