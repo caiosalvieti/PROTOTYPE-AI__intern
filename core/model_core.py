@@ -1,7 +1,7 @@
 # core/model_core.py
 from __future__ import annotations
 from typing import Dict, Any, Optional, Tuple
-
+from pathlib import Path  # <-- IMPORTAR Path
 import time
 import numpy as np
 import os
