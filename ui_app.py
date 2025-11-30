@@ -7,7 +7,10 @@ import numpy as np
 from PIL import Image
 import streamlit as st
 
-from core.model_core import skinaizer_model_core
+# A função skinaizer_model_core é importada e usada.
+# Garanta que o core/model_core.py ou core/yolo_roi.py foi corrigido 
+# para carregar o modelo YOLO no caminho absoluto!
+from core.yolo_roi import skinaizer_model_core #  yolo_roi.py
 
 # page config 
 st.set_page_config(page_title="SkinAizer", page_icon="🧴", layout="wide")
@@ -17,13 +20,14 @@ M     = importlib.import_module("main")
 SC    = importlib.import_module("scores")
 REMOD = importlib.import_module("rec_engine")
 
-# helpers 
+
+# --- FUNÇÕES DE CACHE (OBJETOS PESADOS) ---
+
 @st.cache_resource
 def _load_rec_engine():
     """
     Carrega e inicializa o RecEngine. Usamos st.cache_resource
-    para garantir que a leitura e parsing do products_kb.csv
-    ocorra apenas uma vez.
+    para garantir que a leitura e parsing do products_kb.csv ocorra apenas uma vez.
     """
     # Prefer the shared instance from main.py if it exists and is of correct type
     rec = getattr(M, "REC_ENGINE", None)
@@ -40,6 +44,18 @@ def _load_rec_engine():
                 pass
     return None
 
+
+@st.cache_resource
+def _load_skinaizer_core_model():
+    """
+    Garante que a inicialização do YOLO (via skinaizer_model_core)
+    ocorra apenas na primeira execução do Streamlit, retornando a função.
+    """
+    # Retorna a função de inferência que usa o modelo YOLO cacheado internamente
+    return skinaizer_model_core
+
+
+# --- HELPERS (LOGIC) ---
 
 def _list_images(root: str) -> List[str]:
     res = []
@@ -76,6 +92,9 @@ def _run_pipeline(
     flags: Dict[str, bool] | None = None
 ) -> Dict[str, Any]:
     import time
+    
+    # Carrega a função de inferência do Core (agora cacheada)
+    core_model_func = _load_skinaizer_core_model()
 
     #  total timing start 
     t_total0 = time.perf_counter()
@@ -84,8 +103,8 @@ def _run_pipeline(
     rgb = M.imread_rgb(image_path)
     rgb = M.gray_world(rgb)
 
-    # 2) YOLO-based detection via model_core
-    core_out = skinaizer_model_core(rgb)
+    # 2) YOLO-based detection via função cacheada
+    core_out = core_model_func(rgb)
     yolo_bbox = core_out.get("bbox")
     timings = core_out.get("timings", {}).copy()
 
@@ -300,6 +319,8 @@ with st.sidebar:
     st.header("Dev")
     if st.button("Reload modules"):
         try:
+            # Você pode precisar recarregar o módulo core também se ele for modificado
+            # importlib.reload(core.yolo_roi)
             importlib.reload(M)
             importlib.reload(SC)
             importlib.reload(REMOD)
