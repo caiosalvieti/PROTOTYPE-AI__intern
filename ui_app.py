@@ -82,15 +82,7 @@ def _draw_overlay(rgb: np.ndarray, box) -> np.ndarray:
     return dbg
 
 
-def _run_pipeline(
-    image_path: str,
-    tier: str = "Core",
-    include_device: bool = True,
-    max_dim: int = 900,
-    min_side: int = 120,
-    rec=None,
-    flags: Dict[str, bool] | None = None
-) -> Dict[str, Any]:# streamlit_app.py - SUBSTITUA ESTA FUNÇÃO:
+# streamlit_app.py - SUBSTITUA ESTA FUNÇÃO:
 
 def _run_pipeline(
     image_path: str,
@@ -176,7 +168,6 @@ def _run_pipeline(
         "timings": timings,
     }
 
-
 def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
     st.subheader(f"Results — {src_label}")
 
@@ -248,7 +239,7 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
         return
     if "error" in plan:
         st.error(plan["error"])
-        return
+        return 
 
     st.markdown(f"### Suggested routine — {plan.get('plan', 'Core')}")
     reasons = plan.get("reasons") or {}
@@ -287,7 +278,7 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any]) -> None:
                 continue
             with st.expander(f"{f} rationale"):
                 for ln in lines:
-                    st.write("• " + ln)
+                    st.write("• " + ln) 
 
 
 # UI 
@@ -393,4 +384,4 @@ with tab2:
                 if out.get("error"):
                     st.error(out["error"])
                 else:
-                    _render_results("Dataset", picked_img, out)
+                    _render_results("Dataset", picked_img, out)    
