@@ -379,6 +379,53 @@ def recommend_from_features(r: Dict[str, float]) -> List[str]:
     if not recs:           recs.append("Gentle cleanser + ceramide moisturizer + SPF.")
     return recs
 
+def analyze_image_path(
+    image_path: str,
+    model_path: Optional[str] = None,
+    save_debug: bool = True,
+    max_dim: int = 800,
+    min_side: int = 120,
+) -> Dict:
+    """
+    UI-friendly wrapper: returns data instead of printing.
+    """
+    img = gray_world(imread_rgb(image_path))
+    box = detect_face_with_fallback(img, max_dim=max_dim, min_side=min_side)
+    if box is None:
+        return {"ok": False, "error": "no_face"}
+
+    x, y, w, h = box
+    face = img[y:y + h, x:x + w]
+    feats, zones = extract_features(face)
+
+    debug_path = None
+    if save_debug:
+        dbg = INTERIM / f"debug_{ts()}.jpg"
+        save_debug_panel(img, box, zones, str(dbg))
+        debug_path = str(dbg)
+
+    # optional model inference (kept compatible with CLI)
+    model_pred = None
+    if model_path and Path(model_path).is_file():
+        bundle = load(model_path)
+        model, cols = bundle["model"], bundle["features"]
+        X = pd.DataFrame([{k: feats.get(k, 0.0) for k in cols}])
+        model_pred = model.predict(X)[0]
+
+    # profile + plan
+    profile = infer_skin_profile(feats)
+    plan = REC_ENGINE.recommend(feats, profile, tier="Core", include_device=True)
+
+    return {
+        "ok": True,
+        "box": box,
+        "feats": feats,
+        "profile": profile,
+        "plan": plan,
+        "model_pred": model_pred,
+        "debug_path": debug_path,
+    }
+
 #  infer 
 def infer(image_path: str, model_path: str, save_debug: bool = True,
           max_dim: int = 800, min_side: int = 120):

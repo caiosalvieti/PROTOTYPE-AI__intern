@@ -7,6 +7,103 @@ import numpy as np
 from PIL import Image
 import streamlit as st
 
+import streamlit as st
+
+BRIDGE_FUNNEL = [
+    ("goal", "What do you most want to improve?", ["Gloss control", "Redness relief", "Deep hydration", "Blemish control", "Spot fading"]),
+    ("sensitive", "Does your skin react easily to new products?", ["Yes", "No"]),
+    ("avoid", "Any ingredients you want to avoid?", ["Avoid alcohol", "Avoid fragrance", "No restrictions"]),
+    ("sun", "What is your daily sun exposure level?", ["Low", "Medium", "High"]),
+    ("plan", "Routine length?", ["3 weeks", "1 month"]),
+]
+
+def bridge_init():
+    st.session_state.setdefault("bridge_step", 0)
+    st.session_state.setdefault("bridge_messages", [])
+    st.session_state.setdefault("bridge_profile", {})
+    st.session_state.setdefault("bridge_ready", False)
+
+def bridge_apply_answer(key, answer):
+    p = st.session_state["bridge_profile"]
+    if key == "goal":
+        p["goal"] = answer
+    elif key == "sensitive":
+        p["sensitive"] = (answer == "Yes")
+    elif key == "avoid":
+        p["avoid_alcohol"] = (answer == "Avoid alcohol")
+        p["avoid_fragrance"] = (answer == "Avoid fragrance")
+    elif key == "sun":
+        p["sun_exposure"] = answer
+    elif key == "plan":
+        p["plan_length"] = "3_weeks" if answer == "3 weeks" else "1_month"
+    st.session_state["bridge_profile"] = p
+
+def bridge_render():
+    bridge_init()
+
+    for m in st.session_state["bridge_messages"]:
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+
+    step = st.session_state["bridge_step"]
+    if step >= len(BRIDGE_FUNNEL):
+        st.session_state["bridge_ready"] = True
+        return
+
+    key, q, options = BRIDGE_FUNNEL[step]
+    with st.chat_message("assistant"):
+        st.markdown(q)
+        cols = st.columns(len(options))
+        for i, opt in enumerate(options):
+            if cols[i].button(opt, key=f"bridge_{step}_{i}"):
+                st.session_state["bridge_messages"].append({"role": "assistant", "content": q})
+                st.session_state["bridge_messages"].append({"role": "user", "content": opt})
+                bridge_apply_answer(key, opt)
+                st.session_state["bridge_step"] += 1
+                st.rerun()
+
+def bridge_weights_and_rules(feats, bridge_profile):
+    # Use your existing features as image “base scores”
+    oiliness = float(feats.get("global_shn", 0.0))
+    redness  = float(feats.get("global_red", 0.0))
+    texture  = float(feats.get("global_txt", 0.0))
+
+    weights = {
+        "sebum_control": oiliness,
+        "soothing": redness,
+        "texture": texture,
+        "spf": 0.3,
+    }
+
+    goal = bridge_profile.get("goal")
+    if goal == "Gloss control":
+        weights["sebum_control"] += 0.7
+    elif goal == "Redness relief":
+        weights["soothing"] += 0.7
+    elif goal == "Deep hydration":
+        weights["soothing"] += 0.2
+    elif goal == "Blemish control":
+        weights["sebum_control"] += 0.4
+    elif goal == "Spot fading":
+        weights["texture"] += 0.3
+
+    sun = bridge_profile.get("sun_exposure")
+    if sun == "High":
+        weights["spf"] += 0.7
+    elif sun == "Medium":
+        weights["spf"] += 0.4
+
+    s = sum(weights.values()) or 1.0
+    weights = {k: v / s for k, v in weights.items()}
+
+    rules = {
+        "exclude_alcohol": bool(bridge_profile.get("avoid_alcohol", False)),
+        "exclude_fragrance": bool(bridge_profile.get("avoid_fragrance", False)),
+        "sensitive": bool(bridge_profile.get("sensitive", False)),
+        "plan_length": bridge_profile.get("plan_length", "3_weeks"),
+    }
+    return weights, rules
+
 # A função skinaizer_model_core é importada e usada.
 # Garanta que o core/model_core.py ou core/yolo_roi.py foi corrigido 
 # para carregar o modelo YOLO no caminho absoluto!
