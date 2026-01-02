@@ -177,7 +177,7 @@ class RecEngine:
         w["clogged_pores"] = max(s.get("oiliness", 0.0), s.get("texture", 0.0) * 0.6)
         w["texture"] = s.get("texture", 0.0)
         w["redness"] = s.get("redness", 0.0)
-        w["hydration"] = s.get("dryness", 0.0)
+        w["hydration"] = s.get("dryness", s.get("hydration", 0.0))
         w["barrier"] = max(s.get("dryness", 0.0) * 0.7, s.get("sensitivity", 0.0) * 0.3)
         w["sensitivity"] = s.get("sensitivity", 0.0)
         w["uv"] = 0.5
@@ -256,11 +256,16 @@ class RecEngine:
     def _pick_exfoliant_candidates(self, kb: pd.DataFrame, weights: Dict[str, float]) -> pd.DataFrame:
         oil = weights.get("oil", 0.0)
         dry = weights.get("hydration", 0.0)
+        def has_any(row_set, keys):
+            try:
+                return any(k in row_set for k in keys)
+            except Exception:
+                return False
         if oil >= dry:
-            return kb[(kb["form"] == "exfoliant") & kb["actives"].fillna("").astype(str).str.contains(r"\bbha\b|salicylic", regex=True)]
+            return kb[(kb["form"] == "exfoliant") & kb["actives"].map(lambda s: has_any(s, {"bha", "salicylic_acid"}))]
         else:
-            return kb[(kb["form"] == "exfoliant") & kb["actives"].fillna("").astype(str).str.contains(r"\baha\b|\bpha\b|lactic|mandelic", regex=True)]
-
+            return kb[(kb["form"] == "exfoliant") & kb["actives"].map(lambda s: has_any(s, {"aha", "pha", "lactic_acid", "mandelic_acid"}))]
+        
     #  main API 
     def recommend(self, feats: dict, profile: dict, tier: str = "Core", include_device: bool = True, top_k_per_type: int = 1) -> dict:
         tier = tier if tier in PLAN_TIERS else "Core"

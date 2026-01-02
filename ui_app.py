@@ -14,9 +14,9 @@ from core.yolo_roi import skinaizer_model_core
 st.set_page_config(page_title="SkinAizer", page_icon="🧴", layout="wide")
 
 # Hot-reloadable project modules
-M     = importlib.import_module("main")
-SC    = importlib.import_module("scores")
-REMOD = importlib.import_module("rec_engine")
+
+from core.pipeline import analyze_image_path
+import rec_engine as REMOD   # only for RecEngine class (bridge recompute)
 
 # -----------------------------
 # Session state persistence
@@ -160,12 +160,10 @@ def _load_rec_engine():
         return rec
 
     # Otherwise try common KB locations
+def _load_rec_engine():
     for p in ["DATA/products_kb.csv", "data/interim/products_kb.csv", "products_kb.csv"]:
         if os.path.isfile(p):
-            try:
-                return REMOD.RecEngine(p)
-            except Exception:
-                pass
+            return REMOD.RecEngine(p)
     return None
 
 @st.cache_resource
@@ -211,55 +209,78 @@ def _run_pipeline(
     rec=None,
     flags: Optional[Dict[str, bool]] = None
 ) -> Dict[str, Any]:
-    import time
-    W_proc, H_proc = 640, 640
 
-    dbg_bytes = None
-    t_total0 = time.perf_counter()
+    # run the new core pipeline
+    res = analyze_image_path(
+        image_path,
+        save_debug=True,
+        max_dim=max_dim,
+        min_side=min_side,
+        # if your core.pipeline supports these, pass them too:
+        # tier=tier,
+        # include_device=include_device,
+    )
 
-    # 1) load + preproc
-    rgb = M.imread_rgb(image_path)
-    H_orig, W_orig = rgb.shape[:2]
-    rgb = M.gray_world(rgb)
+    # core pipeline returns typed result (dataclass)
+    if not getattr(res, "ok", False):
+        return {"error": getattr(res, "error", "analysis_failed")}
 
-    # 2) YOLO detection
-    core_model_func = _load_skinaizer_core_model()
-    core_out = core_model_func(rgb)
-    yolo_bbox = core_out.get("bbox")
-    timings = (core_out.get("timings") or {}).copy()
+    feats = res.feats or {}
+    profile = res.profile or {}
+    plan = res.plan or None
 
-    # 3) bbox rescale or fallback
-    if yolo_bbox is not None:
-        x_min_proc, y_min_proc, x_max_proc, y_max_proc = yolo_bbox
-        scale_w = W_orig / W_proc
-        scale_h = H_orig / H_proc
-        x_min = int(x_min_proc * scale_w)
-        y_min = int(y_min_proc * scale_h)
-        x_max = int(x_max_proc * scale_w)
-        y_max = int(y_max_proc * scale_h)
-        box = (x_min, y_min, x_max - x_min, y_max - y_min)
-    else:
-        box = M.detect_face_with_fallback(rgb, max_dim=max_dim, min_side=min_side)
-
-    if box is None:
-        return {"error": "no_face_detected"}
-
-    x, y, w, h = box
-    face = rgb[y:y + h, x:x + w]
-
-    feats, zones = M.extract_features(face)
-    profile = SC.infer_skin_profile(feats)
-
-    # merge sidebar flags (optional)
+    # apply sidebar flags (your current behavior)
     flags = flags or {}
     if flags.get("sensitive"):
         profile.setdefault("scores", {})
-        profile["scores"]["sensitivity"] = max(profile["scores"].get("sensitivity", 0.0), 0.8)
-        profile.setdefault("flags", []).append("sensitive")
+        profile["scores"]["sensitivity"] = max(float(profile["scores"].get("sensitivity", 0.0)), 0.8)
+        profile.setdefault("flags", [])
+        if "sensitive" not in profile["flags"]:
+            profile["flags"].append("sensitive")
+
     if flags.get("acne_prone"):
         profile["acne_prone"] = True
     if flags.get("pregnant"):
         profile["pregnant"] = True
+
+    # IMPORTANT: ensure plan matches UI tier/include_device (recompute here)
+    if rec is not None:
+        try:
+            plan = rec.recommend(feats, profile, tier=tier, include_device=include_device)
+        except Exception as e:
+            plan = {"error": f"rec_engine_error: {e}"}
+
+    # box (xywh) from core ROI
+    box = None
+    if res.roi and res.roi.bbox:
+        b = res.roi.bbox
+        box = [int(b.x), int(b.y), int(b.w), int(b.h)]
+
+    # debug bytes (so your renderer stays the same)
+    dbg_bytes = None
+    if res.debug_path and os.path.isfile(res.debug_path):
+        try:
+            with open(res.debug_path, "rb") as f:
+                dbg_bytes = f.read()
+        except Exception:
+            pass
+
+    qa = {
+        "fail": bool(feats.get("qa_fail", 0)),
+        "issues": feats.get("qa_issues", ""),
+        "mean_gray": float(feats.get("qa_mean_gray", 0.0)),
+    }
+
+    return {
+        "box": box,
+        "features": feats,
+        "profile": profile,
+        "plan": plan,
+        "debug_bytes": dbg_bytes,
+        "qa": qa,
+        "timings": {},     # optional: add timings later inside core.pipeline
+        "rgb": None,       # don't store huge arrays in session_state
+    }
 
     # rec engine
     plan = None
@@ -413,8 +434,10 @@ def _render_results(src_label: str, img_source, out: Dict[str, Any], rec, tier: 
         col_img.image(img_source, caption="Uploaded", width="stretch")
 
     if out.get("debug_bytes"):
-        col_overlay.image(out["debug_bytes"], caption="Debug panel (face + zones)", width="stretch")
+        col_overlay.image(out["debug_bytes"], caption="Debug panel", width="stretch")
     else:
+        col_overlay.info("No debug panel available.")
+
         try:
             dbg = _draw_overlay(out["rgb"], out["box"])
             col_overlay.image(dbg, caption="Detection overlay", width="stretch")
