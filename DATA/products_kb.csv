@@ -1,9 +1,19 @@
 id,sku,product_name,brand,tier,form,skin_types,concerns,actives,size_ml,price_usd,fragrance_free,comedogenicity,usage,upsell_tier,contra,include_device,link
-ser_niam_05,ser_niam_05,niacinamide serum 5%,foreo,core,serum,"oily,combo","redness,pore,oil","niacinamide",30,19.0,true,1,"am/pm",S,,false,
-ser_aha_05,ser_aha_05,gentle aha exfoliant 5%,foreo,core,exfoliant,"dry,combo,normal","texture,dullness","aha,lactic_acid",30,22.0,true,1,"pm 2–3x/week",S,,false,
-ser_bha_02,ser_bha_02,bha serum 2%,foreo,core,exfoliant,"oily,combo","clogged_pores,oil","bha,salicylic_acid",30,21.0,true,1,"pm 3x/week",S,,false,
-mos_cer,mos_cer,barrier repair moisturizer,foreo,core,moisturizer,"dry,normal,combo","barrier,redness,hydration","ceramides,cholesterol,free_fatty_acids",50,28.0,true,1,"pm (am if needed)",M,,false,
-spf_30,spf_30,daily sunscreen spf 30,foreo,core,spf,"all","uv","uv_filters",50,25.0,true,1,"am",M,,false,
-gel_light,gel_light,oil-control gel moisturizer,foreo,core,moisturizer,"oily,combo","oil,shine","humectants",50,24.0,true,1,"am/pm",S,,false,
-dev_luna3,dev_luna3,luna 3 (device),foreo,device,device,"all","deep_cleanse","device",0,149.0,true,0,"",L,,true,https://www.foreo.com/
-ser_ret_01,ser_ret_01,adapalene 0.1% (night),foreo,advanced,serum,"oily,acne","acne,texture","retinoid,adapalene",15,15.0,true,1,"pm only; start 2–3x/week",M,"retinoid_pregnancy",false,
+cln_micro_01,cln_micro_01,Micro-Foam Cleanser 2.0,foreo,starter,cleanser,"all","dirt,oil","amino acids,vitamin e",100,49.0,true,1,"am/pm",S,,false,https://www.foreo.com/micro-foam-cleanser-2-0
+ser_niam_05,ser_niam_05,Niacinamide Serum 5%,foreo,core,serum,"oily,combo","redness,pore,oil","niacinamide",30,19.0,true,1,"am/pm",C,,false,https://www.foreo.com/supercharged-serum-2-0
+ser_aha_05,ser_aha_05,Gentle AHA Exfoliant 5%,foreo,core,exfoliant,"dry,combo,normal","texture,dullness","aha,lactic_acid",30,22.0,true,1,"pm 2-3x/week",C,,false,https://www.foreo.com/skincare
+ser_bha_02,ser_bha_02,BHA Serum 2%,foreo,core,exfoliant,"oily,combo","clogged_pores,oil","bha,salicylic_acid",30,21.0,true,1,"pm 3x/week",C,,false,https://www.foreo.com/skincare
+ser_sss_01,ser_sss_01,Serum Serum Serum,foreo,intense,serum,"all","aging,hydration","hyaluronic_acid,squalane",30,59.0,true,1,"am/pm",I,,false,https://www.foreo.com/serum-serum-serum
+ser_vitc_10,ser_vitc_10,Vitamin C Brightening Serum,foreo,intense,serum,"all","spots,dullness","vitamin_c,ferulic_acid",30,35.0,true,1,"am",I,,false,https://www.foreo.com/skincare
+ser_ret_01,ser_ret_01,Adapalene 0.1% (Night),foreo,intense,serum,"oily,acne","acne,texture","retinoid,adapalene",15,15.0,true,1,"pm only; start 2-3x/week",I,"retinoid_pregnancy",false,https://www.foreo.com/skincare
+mos_cer,mos_cer,Barrier Repair Moisturizer,foreo,core,moisturizer,"dry,normal,combo","barrier,redness,hydration","ceramides,cholesterol,free_fatty_acids",50,28.0,true,1,"pm (am if needed)",C,,false,https://www.foreo.com/skincare
+gel_light,gel_light,Oil-Control Gel Moisturizer,foreo,core,moisturizer,"oily,combo","oil,shine","humectants",50,24.0,true,1,"am/pm",C,,false,https://www.foreo.com/skincare
+mos_rich,mos_rich,Ultra-Hydrating Deep Cream,foreo,intense,moisturizer,"dry","dryness,tightness","shea_butter,panthenol",50,32.0,true,2,"pm",I,,false,https://www.foreo.com/skincare
+spf_30,spf_30,Daily Sunscreen SPF 30,foreo,core,spf,"all","uv","uv_filters",50,25.0,true,1,"am",C,,false,https://www.foreo.com/skincare
+dev_luna4,dev_luna4,LUNA 4 (Device),foreo,device,device,"all","deep_cleanse,pores","t-sonic_pulsations",0,279.0,true,0,"am/pm",L,,true,https://www.foreo.com/luna-4
+dev_bear2,dev_bear2,BEAR 2 (Microcurrent),foreo,device,device,"all","sagging,wrinkles","microcurrent,anti-shock",0,399.0,true,0,"pm",L,"heart_implants,pregnancy",true,https://www.foreo.com/bear-2
+dev_ufo3,dev_ufo3,UFO 3 (Mask Device),foreo,device,device,"all","absorption,hydration","led,thermo,cryo",0,299.0,true,0,"am/pm",L,,true,https://www.foreo.com/ufo-3
+msk_h2o,msk_h2o,H2O Overdose Mask,foreo,starter,mask,"dry","dehydration","hyaluronic_acid",6,4.0,true,1,"as_needed",S,,false,https://www.foreo.com/ufo-activated-masks
+msk_pur,msk_pur,Matte Maniac Mask,foreo,starter,mask,"oily","oil,pores","charcoal,witch_hazel",6,4.0,true,1,"as_needed",S,,false,https://www.foreo.com/ufo-activated-masks
+eye_ser,eye_ser,Iris Eye Serum,foreo,intense,serum,"all","dark_circles,puffiness","caffeine,peptides",15,45.0,true,1,"am/pm",I,,false,https://www.foreo.com/iris-eye-serum
+dev_iris2,dev_iris2,IRIS 2 (Eye Massager),foreo,device,device,"all","absorption,puffiness","t-sonic",0,199.0,true,0,"am/pm",L,,true,https://www.foreo.com/iris-2
