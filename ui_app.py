@@ -371,7 +371,7 @@ def build_schedule(plan: Dict[str, Any], rules: Dict[str, Any]) -> Dict[str, Lis
         am_steps=["Cleanse", _fmt_item(serum), _fmt_item(mois), _fmt_item(spf)],
         pm_steps=["Cleanse", _fmt_item(mois)],
         notes=[
-            "Keep it boring. Photo-based baseline first.",
+            "Keep it smoothly. Photo-based.",
             f"Device: {_fmt_item(dev) if dev else 'optional'} (gentle, 2–3×/week)."
         ]
     )
