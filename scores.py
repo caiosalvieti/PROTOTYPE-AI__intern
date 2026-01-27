@@ -2,6 +2,10 @@ from __future__ import annotations
 import json, os
 from typing import Dict, Any, Tuple
 import numpy as np
+import logging
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 # Optional, only used for auto-calibration
 try:
@@ -127,7 +131,8 @@ def infer_skin_profile(feats: Dict[str, Any], q: Dict[str, Dict[str, float]] | N
     # Concern scores (0..1)
     concerns_scores = {
         "oiliness":  oiliness,
-        "hydration": dryness,
+        "hydration": dryness, # Kept for UI display
+        "dryness":   dryness, # ADDED: Required by RecEngine
         "barrier":   float(np.clip(0.5 * dryness + 0.5 * sensitivity, 0, 1)),
         "texture":   texture_norm,
         "redness":   redness,
@@ -171,4 +176,3 @@ def refresh_quantiles(features_csv: str = FEATURES_CSV, out_json: str = Q_JSON) 
     with open(out_json, "w") as f:
         json.dump(q, f)
     return True, q
-

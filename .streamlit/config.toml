@@ -1,0 +1,9 @@
+[theme]
+primaryColor = "#E5007D"   # Foreo Pink
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F4F8" # Very light grey/lavender for sidebar
+textColor = "#2D2D2D"
+font = "sans serif"
+
+[server]
+headless = true

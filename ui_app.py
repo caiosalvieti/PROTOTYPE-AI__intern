@@ -1,4 +1,3 @@
-# streamlit_app.py
 import os, json, tempfile, importlib
 from typing import Dict, Any, List, Tuple, Optional
 
@@ -12,6 +11,88 @@ from core.yolo_roi import skinaizer_model_core
 # Page config
 # -----------------------------
 st.set_page_config(page_title="SkinAizer", page_icon="🧴", layout="wide")
+
+# -----------------------------
+# Custom CSS (Modern "Foreo" Style)
+# -----------------------------
+def load_custom_css():
+    st.markdown("""
+        <style>
+        /* Import a modern font (Poppins is great for tech/beauty) */
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+
+        html, body, [class*="css"]  {
+            font-family: 'Poppins', sans-serif;
+        }
+
+        /* --- METRIC CARDS --- */
+        div[data-testid="stMetric"] {
+            background-color: #ffffff;
+            border: 1px solid #f0f0f0;
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+            text-align: center;
+        }
+        div[data-testid="stMetric"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+        }
+        label[data-testid="stMetricLabel"] {
+            font-weight: 600;
+            color: #888;
+            font-size: 0.9rem;
+        }
+        div[data-testid="stMetricValue"] {
+            color: #E5007D; /* Foreo Pink */
+            font-weight: 600;
+        }
+
+        /* --- BUTTONS --- */
+        div.stButton > button {
+            border-radius: 25px;
+            font-weight: 600;
+            border: none;
+            padding: 10px 24px;
+            transition: all 0.3s ease;
+        }
+        div.stButton > button:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 10px rgba(229, 0, 125, 0.4);
+        }
+
+        /* --- HEADERS --- */
+        h1, h2, h3 {
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            color: #333;
+        }
+        
+        /* --- SIDEBAR --- */
+        section[data-testid="stSidebar"] {
+            background-color: #F8F9FA;
+            border-right: 1px solid #EAEAEA;
+        }
+
+        /* --- IMAGES --- */
+        img {
+            border-radius: 12px;
+        }
+        
+        /* --- CHAT BUBBLES --- */
+        div[data-testid="stChatMessage"] {
+            background-color: #f9f9f9;
+            border-radius: 15px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #eee;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+# Load the styles immediately
+load_custom_css()
 
 # Hot-reloadable project modules
 M     = importlib.import_module("main")
