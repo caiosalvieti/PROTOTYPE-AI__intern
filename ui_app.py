@@ -1,4 +1,4 @@
-import os, json, tempfile, importlib
+import os, json, tempfile, importlib, time
 from typing import Dict, Any, List, Tuple, Optional
 
 import numpy as np
@@ -13,115 +13,83 @@ from core.yolo_roi import skinaizer_model_core
 st.set_page_config(page_title="SkinAizer", page_icon="🧴", layout="wide")
 
 # -----------------------------
-# Custom CSS (Modern "Foreo" Style + Chat Polish)
+# Custom CSS (Mobile App / Action Dock Style)
 # -----------------------------
 def load_custom_css():
     st.markdown("""
         <style>
-        /* Import a modern font (Poppins is great for tech/beauty) */
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
 
         html, body, [class*="css"]  {
             font-family: 'Poppins', sans-serif;
         }
 
-        /* --- METRIC CARDS --- */
-        div[data-testid="stMetric"] {
-            background-color: #ffffff;
-            border: 1px solid #f0f0f0;
-            padding: 15px;
-            border-radius: 15px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            transition: transform 0.2s;
-            text-align: center;
-        }
-        div[data-testid="stMetric"]:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
-        }
-        label[data-testid="stMetricLabel"] {
-            font-weight: 600;
-            color: #888;
-            font-size: 0.9rem;
-        }
-        div[data-testid="stMetricValue"] {
-            color: #E5007D; /* Foreo Pink */
-            font-weight: 600;
+        /* --- CHAT CONTAINER --- */
+        /* Targets the scrollable container for the chat */
+        [data-testid="stVerticalBlockBorderWrapper"] > div > [data-testid="stVerticalBlock"] {
+            gap: 0.5rem;
         }
 
-        /* --- BUTTONS (Global) --- */
-        div.stButton > button {
-            border-radius: 25px;
-            font-weight: 600;
-            border: none;
-            padding: 10px 24px;
-            transition: all 0.3s ease;
-        }
-        div.stButton > button:hover {
-            transform: scale(1.02);
-            box-shadow: 0 4px 10px rgba(229, 0, 125, 0.4);
-        }
-
-        /* --- CHAT STYLING (The "Apple/Messenger" Look) --- */
-        
-        /* 1. Chat Bubbles */
-        div[data-testid="stChatMessage"] {
-            border: none;
-            padding: 1rem;
-            margin-bottom: 0.5rem;
-            background-color: transparent; 
-        }
-
-        /* AI Message (Left, Grey) */
+        /* --- BUBBLES --- */
+        /* AI (Left) */
         div[data-testid="stChatMessage"]:nth-child(odd) {
-            background-color: #F0F2F6; 
-            border-radius: 20px 20px 20px 5px;
-            margin-right: 15%; /* Keep it to the left */
+            background-color: #F4F4F8;
+            border-radius: 18px 18px 18px 4px;
+            padding: 5px 10px;
+            margin-right: 15%;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            border: none;
         }
-
-        /* User Message (Right, Pink) */
+        /* User (Right) */
         div[data-testid="stChatMessage"]:nth-child(even) {
-            background-color: #E5007D; 
+            background-color: #E5007D;
             color: white;
-            border-radius: 20px 20px 5px 20px;
-            margin-left: 15%; /* Push it to the right */
+            border-radius: 18px 18px 4px 18px;
+            padding: 5px 10px;
+            margin-left: 15%;
+            box-shadow: 0 4px 10px rgba(229, 0, 125, 0.2);
+            border: none;
         }
-        
-        /* Fix text color inside pink user bubbles */
         div[data-testid="stChatMessage"]:nth-child(even) p {
             color: white !important;
         }
 
-        /* 2. Option Buttons ("Pills") inside Chat */
-        div[data-testid="column"] button {
-            border-radius: 50px !important;
-            border: 1px solid #E5007D !important;
-            background-color: white !important;
-            color: #E5007D !important;
-            font-size: 0.85rem !important;
-            padding: 5px 15px !important;
-            margin: 2px !important;
-            box-shadow: none !important;
-        }
-        div[data-testid="column"] button:hover {
-            background-color: #E5007D !important;
-            color: white !important;
-        }
-
-        /* --- SIDEBAR --- */
-        section[data-testid="stSidebar"] {
-            background-color: #F8F9FA;
-            border-right: 1px solid #EAEAEA;
-        }
-
-        /* --- IMAGES --- */
-        img {
+        /* --- ACTION DOCK (Buttons) --- */
+        /* Make the button container look like a mobile menu */
+        div.stButton > button {
+            width: 100%;
             border-radius: 12px;
+            border: 1px solid #E5007D;
+            background-color: white;
+            color: #E5007D;
+            font-weight: 600;
+            padding: 12px 10px;
+            transition: all 0.2s;
+            height: auto;
+            white-space: normal;
+        }
+        div.stButton > button:hover {
+            background-color: #E5007D;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        /* --- METRICS --- */
+        div[data-testid="stMetric"] {
+            background-color: white;
+            border: 1px solid #eee;
+            border-radius: 12px;
+            padding: 10px;
+            text-align: center;
+        }
+        div[data-testid="stMetricValue"] {
+            color: #E5007D;
+            font-size: 1.4rem;
         }
         </style>
     """, unsafe_allow_html=True)
 
-# Load the styles immediately
 load_custom_css()
 
 # Hot-reloadable project modules
@@ -130,14 +98,12 @@ SC    = importlib.import_module("scores")
 REMOD = importlib.import_module("rec_engine")
 
 # -----------------------------
-# Session state persistence
+# Session & Helpers
 # -----------------------------
 def _ss_init():
-    st.session_state.setdefault("pipeline_out", None)     # stores last analysis output dict
-    st.session_state.setdefault("img_source", None)       # stores UploadedFile or path (for display)
-    st.session_state.setdefault("img_source_label", "")   # "Uploaded" / "Dataset"
-
-    # Bridge chat state
+    st.session_state.setdefault("pipeline_out", None)
+    st.session_state.setdefault("img_source", None)
+    st.session_state.setdefault("img_source_label", "")
     st.session_state.setdefault("bridge_step", 0)
     st.session_state.setdefault("bridge_messages", [])
     st.session_state.setdefault("bridge_answers", {})
@@ -149,131 +115,111 @@ def reset_all():
     st.session_state["pipeline_out"] = None
     st.session_state["img_source"] = None
     st.session_state["img_source_label"] = ""
-
     st.session_state["bridge_step"] = 0
     st.session_state["bridge_messages"] = []
     st.session_state["bridge_answers"] = {}
     st.session_state["bridge_done"] = False
 
+# FOREO Avatar
+FOREO_AVATAR = "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/Foreo_logo.svg/1024px-Foreo_logo.svg.png"
 
 # -----------------------------
-# Bridge chat (diagnostic funnel)
+# 2.0 The "App-Like" Bridge
 # -----------------------------
 BRIDGE_FUNNEL = [
-    ("goal", "What do you most want to improve?",
-     ["Gloss control", "Redness relief", "Deep hydration", "Blemish control", "Spot fading"]),
-    ("sensitive", "Does your skin react easily to new products?",
-     ["Yes", "No"]),
-    ("avoid", "Any ingredients you want to avoid?",
-     ["Avoid alcohol", "Avoid fragrance", "No restrictions"]),
-    ("sun", "What is your daily sun exposure level?",
-     ["Low", "Medium", "High"]),
-    ("plan", "Routine length?",
-     ["3 weeks", "1 month"]),
+    ("goal", "What is your main goal today?", ["✨ Gloss Control", "🔴 Redness Relief", "💧 Deep Hydration", "🎯 Spot Fading"]),
+    ("sensitive", "Does your skin react easily?", ["Yes, it's sensitive", "No, it's resilient"]),
+    ("sun", "Daily sun exposure?", ["☁️ Low / Indoor", "☀️ High / Outdoor"]),
+    ("plan", "Routine commitment?", ["⚡ 3 Weeks (Fast)", "📅 1 Month (Steady)"]),
 ]
 
 def bridge_render() -> Tuple[bool, Dict[str, str]]:
-    """Renders the chat and returns (ready, answers)."""
-    # FOREO Avatar URL (Official logo or icon)
-    FOREO_AVATAR = "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/Foreo_logo.svg/1024px-Foreo_logo.svg.png"
     
-    # Show history
-    for m in st.session_state["bridge_messages"]:
-        role = m["role"]
-        # Use avatar only for assistant to look professional
-        if role == "assistant":
-            with st.chat_message(role, avatar=FOREO_AVATAR):
-                st.markdown(m["content"])
-        else:
-            with st.chat_message(role): # Default user icon
-                st.markdown(m["content"])
+    # 1. Fixed Height Chat Window (Scrollable)
+    # This keeps the UI stable!
+    with st.container(height=400, border=True):
+        # Greeting if empty
+        if not st.session_state["bridge_messages"]:
+            with st.chat_message("assistant", avatar=FOREO_AVATAR):
+                st.write("Hello! I've analyzed your skin. Let's fine-tune your routine with 4 quick questions.")
 
-    step = int(st.session_state["bridge_step"])
-    if step >= len(BRIDGE_FUNNEL):
-        st.session_state["bridge_done"] = True
-        return True, dict(st.session_state["bridge_answers"])
+        # History
+        for m in st.session_state["bridge_messages"]:
+            role = m["role"]
+            if role == "assistant":
+                with st.chat_message("assistant", avatar=FOREO_AVATAR):
+                    st.write(m["content"])
+            else:
+                with st.chat_message("user"):
+                    st.write(m["content"])
 
-    key, q, options = BRIDGE_FUNNEL[step]
+        # Current Question (Preview inside chat)
+        step = int(st.session_state["bridge_step"])
+        if step < len(BRIDGE_FUNNEL):
+            key, q, options = BRIDGE_FUNNEL[step]
+            
+            # Logic to avoid showing duplicate questions
+            last_msg = st.session_state["bridge_messages"][-1]["content"] if st.session_state["bridge_messages"] else ""
+            if last_msg != q:
+                with st.chat_message("assistant", avatar=FOREO_AVATAR):
+                    st.write(q)
 
-    # Render current question
-    with st.chat_message("assistant", avatar=FOREO_AVATAR):
-        st.markdown(f"**{q}**")
-        # Use columns to make buttons look like "Pills" / "Chips"
-        # We wrap them in a container to apply our specific CSS
-        cols = st.columns(len(options))
+    # 2. The "Action Dock" (Fixed at bottom of chat area)
+    if step < len(BRIDGE_FUNNEL):
+        key, q, options = BRIDGE_FUNNEL[step]
+        st.write("---") # Visual separator
+        st.caption("Select an option:")
+        
+        # Grid layout for buttons (2 per row looks like a mobile menu)
+        cols = st.columns(2)
         for i, opt in enumerate(options):
-            if cols[i].button(opt, key=f"bridge_{step}_{i}"):
+            # Modulo logic to place buttons in the 2 columns
+            col = cols[i % 2]
+            if col.button(opt, key=f"btn_{step}_{i}", use_container_width=True):
+                # Update State
                 st.session_state["bridge_messages"].append({"role": "assistant", "content": q})
                 st.session_state["bridge_messages"].append({"role": "user", "content": opt})
                 st.session_state["bridge_answers"][key] = opt
                 st.session_state["bridge_step"] += 1
                 st.rerun()
 
-    return False, dict(st.session_state["bridge_answers"])
+        return False, dict(st.session_state["bridge_answers"])
 
-def bridge_weights_and_rules(feats: Dict[str, Any], answers: Dict[str, str]) -> Tuple[Dict[str, float], Dict[str, Any]]:
-    """Create weights + restriction rules from chat answers + image features."""
-    oiliness = float(feats.get("global_shn", 0.0))
-    redness  = float(feats.get("global_red", 0.0))
-    texture  = float(feats.get("global_txt", 0.0))
+    # If done
+    st.session_state["bridge_done"] = True
+    return True, dict(st.session_state["bridge_answers"])
 
-    weights = {
-        "sebum_control": oiliness,
-        "soothing": redness,
-        "texture": texture,
-        "spf": 0.3,
-    }
+# -----------------------------
+# Logic Connectors
+# -----------------------------
+def bridge_weights_and_rules(feats, answers):
+    oil = feats.get("global_shn", 0)
+    red = feats.get("global_red", 0)
+    weights = {"sebum_control": oil, "soothing": red, "spf": 0.3}
 
-    goal = answers.get("goal")
-    if goal == "Gloss control":
-        weights["sebum_control"] += 0.7
-    elif goal == "Redness relief":
-        weights["soothing"] += 0.7
-    elif goal == "Deep hydration":
-        weights["soothing"] += 0.2
-    elif goal == "Blemish control":
-        weights["sebum_control"] += 0.4
-    elif goal == "Spot fading":
-        weights["texture"] += 0.3
-
-    sun = answers.get("sun")
-    if sun == "High":
-        weights["spf"] += 0.7
-    elif sun == "Medium":
-        weights["spf"] += 0.4
-
-    s = sum(weights.values()) or 1.0
-    weights = {k: float(v) / s for k, v in weights.items()}
+    # Map fancy labels back to logic keys
+    g = answers.get("goal", "")
+    if "Gloss" in g: weights["sebum_control"] += 0.8
+    if "Redness" in g: weights["soothing"] += 0.8
+    if "Hydration" in g: weights["soothing"] += 0.3
+    
+    if "High" in answers.get("sun", ""): weights["spf"] += 0.8
 
     rules = {
-        "exclude_alcohol": (answers.get("avoid") == "Avoid alcohol"),
-        "exclude_fragrance": (answers.get("avoid") == "Avoid fragrance"),
-        "sensitive": (answers.get("sensitive") == "Yes"),
-        "plan_length": "3_weeks" if answers.get("plan") == "3 weeks" else "1_month",
-        "goal": goal or "",
-        "sun": sun or "",
+        "sensitive": "sensitive" in answers.get("sensitive", "").lower(),
+        "plan_length": "1_month" if "1 Month" in answers.get("plan", "") else "3_weeks"
     }
     return weights, rules
 
-def merge_rules_into_profile(profile: Dict[str, Any], rules: Dict[str, Any]) -> Dict[str, Any]:
-    """Blend bridge rules into your existing profile so RecEngine can react."""
-    prof = dict(profile or {})
-    prof.setdefault("scores", {})
-    prof.setdefault("flags", [])
-
-    if rules.get("sensitive"):
-        # force high sensitivity
-        prof["scores"]["sensitivity"] = max(float(prof["scores"].get("sensitivity", 0.0)), 0.8)
-        if "sensitive" not in prof["flags"]:
-            prof["flags"].append("sensitive")
-
-    # store context (optional for later use inside RecEngine)
-    prof["bridge"] = {"rules": rules}
-    return prof
-
+def merge_prof(prof, rules):
+    p = dict(prof)
+    if rules["sensitive"]:
+        p.setdefault("scores", {})["sensitivity"] = 0.9
+        p.setdefault("flags", []).append("sensitive")
+    return p
 
 # -----------------------------
-# Caching heavy objects
+# Caching
 # -----------------------------
 @st.cache_resource
 def _load_rec_engine():
@@ -281,37 +227,24 @@ def _load_rec_engine():
     rec = getattr(M, "REC_ENGINE", None)
     if rec is not None and isinstance(rec, REMOD.RecEngine):
         return rec
-
     # Otherwise try common KB locations
     for p in ["DATA/products_kb.csv", "data/interim/products_kb.csv", "products_kb.csv"]:
         if os.path.isfile(p):
-            try:
-                return REMOD.RecEngine(p)
-            except Exception:
-                pass
+            try: return REMOD.RecEngine(p)
+            except: pass
     return None
 
 @st.cache_resource
 def _load_skinaizer_core_model():
     return skinaizer_model_core
 
-
 # -----------------------------
 # Helpers
 # -----------------------------
-def _list_images(root: str) -> List[str]:
-    res = []
-    for base, _, files in os.walk(root):
-        for f in files:
-            if f.lower().endswith((".jpg", ".jpeg", ".png")):
-                res.append(os.path.join(base, f))
-    return sorted(res)
-
 def _save_uploaded(tmp_dir: str, uf) -> str:
     ext = os.path.splitext(uf.name)[1].lower() or ".jpg"
     out = os.path.join(tmp_dir, f"upload{ext}")
-    with open(out, "wb") as f:
-        f.write(uf.getbuffer())
+    with open(out, "wb") as f: f.write(uf.getbuffer())
     return out
 
 def _draw_overlay(rgb: np.ndarray, box) -> np.ndarray:
@@ -321,469 +254,138 @@ def _draw_overlay(rgb: np.ndarray, box) -> np.ndarray:
     cv2.rectangle(dbg, (x, y), (x + w, y + h), (0, 255, 0), 2)
     return dbg
 
-
 # -----------------------------
-# Pipeline (your YOLO-rescale version)
+# Pipeline
 # -----------------------------
-def _run_pipeline(
-    image_path: str,
-    tier: str = "Core",
-    include_device: bool = True,
-    max_dim: int = 900,
-    min_side: int = 120,
-    rec=None,
-    flags: Optional[Dict[str, bool]] = None
-) -> Dict[str, Any]:
+def _run_pipeline(image_path, tier="Core", include_device=True, max_dim=900, min_side=120, rec=None):
     import time
-    W_proc, H_proc = 640, 640
-
-    dbg_bytes = None
-    t_total0 = time.perf_counter()
-
-    # 1) load + preproc
+    t0 = time.perf_counter()
+    
+    # 1. Load
     rgb = M.imread_rgb(image_path)
-    H_orig, W_orig = rgb.shape[:2]
-    rgb = M.gray_world(rgb)
+    rgb = M.gray_world(rgb) # Color correction
 
-    # 2) YOLO detection
-    core_model_func = _load_skinaizer_core_model()
-    core_out = core_model_func(rgb)
-    yolo_bbox = core_out.get("bbox")
-    timings = (core_out.get("timings") or {}).copy()
-
-    # 3) bbox rescale or fallback
-    if yolo_bbox is not None:
-        x_min_proc, y_min_proc, x_max_proc, y_max_proc = yolo_bbox
-        scale_w = W_orig / W_proc
-        scale_h = H_orig / H_proc
-        x_min = int(x_min_proc * scale_w)
-        y_min = int(y_min_proc * scale_h)
-        x_max = int(x_max_proc * scale_w)
-        y_max = int(y_max_proc * scale_h)
-        box = (x_min, y_min, x_max - x_min, y_max - y_min)
-    else:
+    # 2. Detect
+    core_model = _load_skinaizer_core_model()
+    core_out = core_model(rgb)
+    
+    # Fallback logic simplified for demo
+    box = core_out.get("bbox")
+    if box is None:
         box = M.detect_face_with_fallback(rgb, max_dim=max_dim, min_side=min_side)
 
-    if box is None:
-        return {"error": "no_face_detected"}
+    if box is None: return {"error": "No face detected"}
 
-    x, y, w, h = box
-    face = rgb[y:y + h, x:x + w]
-
+    # 3. Analyze
+    x, y, w, h = [int(v) for v in box] # Ensure ints
+    face = rgb[y:y+h, x:x+w]
     feats, zones = M.extract_features(face)
     profile = SC.infer_skin_profile(feats)
 
-    # merge sidebar flags (optional)
-    flags = flags or {}
-    if flags.get("sensitive"):
-        profile.setdefault("scores", {})
-        profile["scores"]["sensitivity"] = max(profile["scores"].get("sensitivity", 0.0), 0.8)
-        profile.setdefault("flags", []).append("sensitive")
-    if flags.get("acne_prone"):
-        profile["acne_prone"] = True
-    if flags.get("pregnant"):
-        profile["pregnant"] = True
-
-    # rec engine
+    # 4. Recommend (Initial Pass)
     plan = None
-    if rec is not None:
-        try:
-            plan = rec.recommend(feats, profile, tier=tier, include_device=include_device)
-        except Exception as e:
-            plan = {"error": f"rec_engine_error: {e}"}
+    if rec:
+        plan = rec.recommend(feats, profile, tier=tier, include_device=include_device)
 
-    # debug image bytes
+    # 5. Debug Image
+    dbg_bytes = None
     try:
-        with tempfile.TemporaryDirectory() as td_dbg:
-            dbg_path = os.path.join(td_dbg, "debug.jpg")
+        with tempfile.TemporaryDirectory() as td:
+            dbg_path = os.path.join(td, "debug.jpg")
             M.save_debug_panel(rgb, box, zones, dbg_path)
-            with open(dbg_path, "rb") as f:
-                dbg_bytes = f.read()
-    except Exception:
-        pass
-
-    qa = {
-        "fail": bool(feats.get("qa_fail", 0)),
-        "issues": feats.get("qa_issues", ""),
-        "mean_gray": float(feats.get("qa_mean_gray", 0)),
-    }
-
-    timings["total_pipeline_ms"] = (time.perf_counter() - t_total0) * 1000.0
+            with open(dbg_path, "rb") as f: dbg_bytes = f.read()
+    except: pass
 
     return {
-        "box": [int(x), int(y), int(w), int(h)],
+        "box": box,
         "features": feats,
         "profile": profile,
         "plan": plan,
         "debug_bytes": dbg_bytes,
-        "qa": qa,
         "rgb": rgb,
-        "timings": timings,
+        "qa": {"fail": False} # Simplified QA
     }
 
-
 # -----------------------------
-# Routine schedule builder (3 weeks vs 1 month)
+# Main Rendering
 # -----------------------------
-def _pick_item(items: List[Dict[str, Any]], form: str) -> Optional[Dict[str, Any]]:
-    for it in items:
-        if (it.get("form") or "").lower() == form.lower():
-            return it
-    return None
-
-def _fmt_item(it: Optional[Dict[str, Any]]) -> str:
-    if not it:
-        return "—"
-    name = f"{(it.get('brand') or '').title()} {it.get('name','')}".strip()
-    usage = (it.get("usage") or "").strip()
-    return f"**{name}**" + (f"  \n_{usage}_" if usage else "")
-
-def build_schedule(plan: Dict[str, Any], rules: Dict[str, Any]) -> Dict[str, List[Dict[str, str]]]:
-    """Return schedule grouped by week label."""
-    items = plan.get("items") or []
-
-    spf   = _pick_item(items, "spf")
-    mois  = _pick_item(items, "moisturizer")
-    serum = _pick_item(items, "serum")
-    exfol = _pick_item(items, "exfoliant")
-    dev   = _pick_item(items, "device")
-
-    sensitive = bool(rules.get("sensitive"))
-    plan_len = rules.get("plan_length", "3_weeks")
-
-    # frequencies
-    if sensitive:
-        exfol_freq = "1×/week (night)"
-    else:
-        exfol_freq = "2–3×/week (night)"
-
-    # Helper for week block
-    def week_block(title: str, am_steps: List[str], pm_steps: List[str], notes: List[str]):
-        return {
-            "title": title,
-            "am": " → ".join(am_steps),
-            "pm": " → ".join(pm_steps),
-            "notes": " • ".join([n for n in notes if n]),
-        }
-
-    # Define AM/PM basics
-    am_standard = ["Cleanse", _fmt_item(serum), _fmt_item(mois), _fmt_item(spf)]
-    pm_basic = ["Cleanse", _fmt_item(mois)]
-    
-    if exfol:
-        pm_exfol = ["Cleanse", f"{_fmt_item(exfol)}  \n_{exfol_freq}_", _fmt_item(mois)]
-    else:
-        pm_exfol = pm_basic
-
-    # --- Weeks ---
-    w1 = week_block(
-        "Week 1 — Balance & barrier",
-        am_steps=am_standard,
-        pm_steps=pm_basic,
-        notes=[
-            "Keep it boring. Photo-based baseline first.",
-            f"Device: {_fmt_item(dev) if dev else 'optional'} (gentle, 2–3×/week)."
-        ]
-    )
-
-    w2 = week_block(
-        "Week 2 — Active treatment",
-        am_steps=am_standard,
-        pm_steps=pm_exfol, 
-        notes=[
-            "Introduce only 1 strong active at a time.",
-            "If irritation: stop actives 72h, focus moisturizer + SPF."
-        ]
-    )
-
-    if sensitive:
-        pm_w3 = pm_basic
-    else:
-        pm_w3 = pm_exfol
-
-    w3 = week_block(
-        "Week 3 — Consolidation & protection",
-        am_steps=am_standard,
-        pm_steps=pm_w3,
-        notes=["Stabilize. Small increases only if skin is calm."]
-    )
-
-    if plan_len == "3_weeks":
-        return {"3-week plan": [w1, w2, w3]}
-
-    # --- 1-Month Logic ---
-    if exfol:
-        pm_w2_slow = ["Cleanse", f"{_fmt_item(exfol)}  \n_1×/week (night)_", _fmt_item(mois)]
-    else:
-        pm_w2_slow = pm_basic
-
-    w2_slow = week_block(
-        "Week 2 — Gentle active intro",
-        am_steps=am_standard,
-        pm_steps=pm_w2_slow,
-        notes=["Start low frequency. Track redness/itching."]
-    )
-
-    freq_w3 = '1–2×/week (night)' if sensitive else '2×/week (night)'
-    if exfol:
-        pm_w3_slow = ["Cleanse", f"{_fmt_item(exfol)}  \n_{freq_w3}_", _fmt_item(mois)]
-    else:
-        pm_w3_slow = pm_basic
-
-    w3_slow = week_block(
-        "Week 3 — Build tolerance",
-        am_steps=am_standard,
-        pm_steps=pm_w3_slow,
-        notes=["If stable, increase one step."]
-    )
-
-    if sensitive:
-        pm_w4 = pm_basic
-    else:
-        pm_w4 = pm_exfol
-
-    w4 = week_block(
-        "Week 4 — Consolidate",
-        am_steps=am_standard,
-        pm_steps=pm_w4,
-        notes=["Maintain. Re-take photo at end of week 4."]
-    )
-
-    return {"1-month plan": [w1, w2_slow, w3_slow, w4]}
-
-
-# -----------------------------
-# Rendering
-# -----------------------------
-def _render_results(src_label: str, img_source, out: Dict[str, Any], rec, tier: str, include_device: bool):
-    st.subheader(f"Results — {src_label}")
-
-    # images
-    col_img, col_overlay = st.columns(2)
-    if isinstance(img_source, str):
-        col_img.image(img_source, caption=os.path.basename(img_source), width="stretch")
-    else:
-        col_img.image(img_source, caption="Uploaded", width="stretch")
-
-    if out.get("debug_bytes"):
-        col_overlay.image(out["debug_bytes"], caption="Debug panel (face + zones)", width="stretch")
-    else:
-        try:
-            dbg = _draw_overlay(out["rgb"], out["box"])
-            col_overlay.image(dbg, caption="Detection overlay", width="stretch")
-        except Exception:
-            pass
-
-    # QA
-    qa = out.get("qa", {}) or {}
-    if qa.get("fail"):
-        st.warning(f"⚠️ Retake suggested — {qa.get('issues') or 'quality issue'}")
-    else:
-        st.success("✅ PASS - good photo quality")
-
-    # timings
-    timings = out.get("timings") or {}
-    if timings:
-        pretty = ", ".join(f"{k}={v:.1f} ms" for k, v in timings.items())
-        st.caption(f"Timings: {pretty}")
-
-    # profile metrics
-    st.markdown("### Skin profile")
-    prof = out.get("profile", {}) or {}
-    scores = prof.get("scores", {}) or {}
-    cols = st.columns(5)
-    cols[0].metric("Skin type", prof.get("skin_type", "?"))
-    cols[1].metric("Oiliness", f"{scores.get('oiliness', 0):.2f}")
-    cols[2].metric("Hydration", f"{scores.get('hydration', 0):.2f}")
-    cols[3].metric("Redness", f"{scores.get('redness', 0):.2f}")
-    cols[4].metric("Texture", f"{scores.get('texture', 0):.2f}")
-
-    with st.expander("Raw JSON (profile & features)"):
-        c1, c2 = st.columns(2)
-        with c1:
-            st.json(prof)
-        with c2:
-            st.json(out.get("features", {}))
-
-    # base plan
-    plan = out.get("plan")
-    if not plan:
-        st.info("No plan (RecEngine not loaded).")
-        return
-    if isinstance(plan, dict) and "error" in plan:
-        st.error(plan["error"])
-        return
-
-    st.markdown(f"### Suggested routine — {plan.get('plan', tier)}")
-    for it in (plan.get("items") or []):
-        name = f"{(it.get('brand') or '').title()} {it.get('name','')}".strip()
-        st.markdown(f"- **{name}** — *{it.get('form','')}*")
-
-    # Bridge chat under results
-    st.divider()
-    st.subheader("Bridge: personalize your routine (4–5 quick questions)")
-    ready, answers = bridge_render()
-
-    if not ready:
-        st.caption("Answer the quick prompts above to tailor the plan.")
-        return
-
-    # apply bridge context
-    weights, rules = bridge_weights_and_rules(out["features"], answers)
-    updated_profile = merge_rules_into_profile(prof, rules)
-
-    st.success("✅ Chat complete — applying your context to the routine.")
-
-    # recompute plan (best-effort)
-    updated_plan = plan
-    if rec is not None:
-        try:
-            updated_plan = rec.recommend(out["features"], updated_profile, tier=tier, include_device=include_device)
-        except Exception as e:
-            st.warning(f"Could not recompute plan with bridge context: {e}")
-
-    # show rules/weights
-    with st.expander("What changed (rules & weights)"):
-        st.json({"weights": weights, "rules": rules})
-
-    # schedule output
-    if not updated_plan or (isinstance(updated_plan, dict) and "error" in updated_plan):
-        st.info("No updated plan available to build a schedule.")
-        return
-
-    schedule = build_schedule(updated_plan, rules)
-    for block_name, weeks in schedule.items():
-        st.markdown(f"## {block_name}")
-        for w in weeks:
-            with st.expander(w["title"], expanded=True):
-                st.markdown("**AM**")
-                st.markdown(w["am"])
-                st.markdown("**PM**")
-                st.markdown(w["pm"])
-                if w.get("notes"):
-                    st.caption(w["notes"])
-
-
-# -----------------------------
-# Main UI
-# -----------------------------
-st.title("SkinAizer: From a Selfie to your daily SkinCare")
+st.title("SkinAizer x FOREO")
 
 REC = _load_rec_engine()
-if REC is None:
-    st.warning("RecEngine not loaded. Make sure `DATA/products_kb.csv` exists (or update the path).")
 
+# --- Sidebar ---
 with st.sidebar:
-    st.header("Plan options")
-    tier = st.selectbox("Plan tier", ["Starter", "Core", "Intense"], index=1)
-    include_device = st.checkbox("Include device", value=True)
-
-    st.header("Optional quick flags (pre-chat)")
-    flag_sensitive = st.checkbox("Sensitive", value=False)
-    flag_acne      = st.checkbox("Acne-prone", value=False)
-    flag_preg      = st.checkbox("Pregnant (avoid retinoids)", value=False)
-
-    st.header("Detector")
-    max_dim  = st.slider("Max image dimension (px)", 600, 1600, 900, step=50)
-    min_side = st.slider("Min face side (px)", 80, 240, 120, step=10)
-
-    st.header("Session")
-    if st.button("New analysis / reset"):
+    st.header("Settings")
+    if st.button("New Analysis"):
         reset_all()
         st.rerun()
 
-    st.header("Dev")
-    if st.button("Reload modules"):
-        try:
-            importlib.reload(M)
-            importlib.reload(SC)
-            importlib.reload(REMOD)
-            st.success("Modules reloaded.")
-        except Exception as e:
-            st.error(f"Reload failed: {e}")
+# --- Main Logic ---
+if st.session_state["pipeline_out"]:
+    out = st.session_state["pipeline_out"]
+    
+    # 1. Results Header
+    c1, c2 = st.columns([1, 1.5])
+    with c1:
+        if st.session_state["img_source"]:
+             st.image(st.session_state["img_source"], caption="Input", use_container_width=True)
+    with c2:
+        st.subheader("Skin Analysis")
+        scores = out["profile"]["scores"]
+        
+        # Metric Cards
+        m1, m2 = st.columns(2)
+        m3, m4 = st.columns(2)
+        m1.metric("Oiliness", f"{scores.get('oiliness',0):.2f}")
+        m2.metric("Redness", f"{scores.get('redness',0):.2f}")
+        m3.metric("Texture", f"{scores.get('texture',0):.2f}")
+        m4.metric("Hydration", f"{scores.get('hydration',0):.2f}")
 
-# If we already analyzed something, show it (persistent)
-if st.session_state["pipeline_out"] is not None:
-    _render_results(
-        st.session_state["img_source_label"],
-        st.session_state["img_source"],
-        st.session_state["pipeline_out"],
-        REC,
-        tier,
-        include_device,
-    )
-    st.stop()
+    st.divider()
 
-# Otherwise show input tabs
-DATA_DIRS = [
-    "DATA/raw",
-    "DATA/interim",
-    "data/raw",
-    "data/interim/processed",
-    "data/interim/raw_sample",
-]
-DATA_DIRS = [p for p in DATA_DIRS if os.path.isdir(p)]
+    # 2. APP-LIKE BRIDGE CHAT
+    st.subheader("💬 Skin Coach")
+    ready, answers = bridge_render()
 
-tab1, tab2 = st.tabs(["Upload", "Pick from dataset"])
+    # 3. Final Output (Only shows when chat is done)
+    if ready:
+        # Re-run recommendation with new rules
+        weights, rules = bridge_weights_and_rules(out["features"], answers)
+        updated_prof = merge_prof(out["profile"], rules)
+        
+        final_plan = REC.recommend(out["features"], updated_prof, tier="Core", include_device=True) if REC else {}
+        
+        st.success("✨ Routine Tailored!")
+        
+        # Tabs for better organization
+        tabs = st.tabs(["📅 Routine", "🛍️ List", "🤖 AI Reasoning"])
+        
+        with tabs[0]:
+            st.markdown(f"**Duration:** {rules['plan_length'].replace('_', ' ').title()}")
+            for item in final_plan.get("items", []):
+                st.info(f"**{item.get('name')}**\n\n_{item.get('usage')}_")
 
-with tab1:
-    left, right = st.columns([3, 1])
-    with left:
-        uploaded = st.file_uploader("Upload your selfie (JPG/PNG)", type=["jpg", "jpeg", "png"])
-    with right:
-        go_upload = st.button("Analyze uploaded", type="primary", use_container_width=True)
+        with tabs[1]:
+             st.dataframe([{"Product": i["name"], "Price": f"${i.get('price_usd',0)}"} for i in final_plan.get("items", [])])
+             
+        with tabs[2]:
+            st.markdown("### Why these products?")
+            for item in final_plan.get("items", []):
+                name = item.get('name')
+                reason = item.get('reason', 'Matches your skin profile.')
+                st.markdown(f"**{name}**")
+                st.caption(f"Reason: {reason}")
 
-    if go_upload and uploaded:
-        with tempfile.TemporaryDirectory() as td:
-            img_path = _save_uploaded(td, uploaded)
-            with st.spinner("Analyzing…"):
-                out = _run_pipeline(
-                    img_path,
-                    tier=tier,
-                    include_device=include_device,
-                    max_dim=max_dim,
-                    min_side=min_side,
-                    rec=REC,
-                    flags={"sensitive": flag_sensitive, "acne_prone": flag_acne, "pregnant": flag_preg},
-                )
-
-        if out.get("error"):
-            st.error(out["error"])
-        else:
-            # persist results so chat survives reruns
-            st.session_state["pipeline_out"] = out
+else:
+    # --- Upload Screen ---
+    st.markdown("### Upload a selfie to begin")
+    uploaded = st.file_uploader("", type=["jpg", "png"])
+    if uploaded and st.button("Analyze Skin", type="primary"):
+        with st.spinner("Processing..."):
+            with tempfile.TemporaryDirectory() as td:
+                path = _save_uploaded(td, uploaded)
+                res = _run_pipeline(path, rec=REC)
+                
+            st.session_state["pipeline_out"] = res
             st.session_state["img_source"] = uploaded
-            st.session_state["img_source_label"] = "Uploaded"
             st.rerun()
-
-with tab2:
-    if not DATA_DIRS:
-        st.info("No dataset folders found. Create `DATA/raw` and place images there.")
-    else:
-        root = st.selectbox("Dataset folder", DATA_DIRS)
-        imgs = _list_images(root) if root else []
-        if not imgs:
-            st.info("No images found in the selected folder.")
-        else:
-            picked_img = st.selectbox("Choose an image", imgs, index=0)
-            go_dataset = st.button("Analyze selected", use_container_width=True)
-
-            if go_dataset and picked_img:
-                with st.spinner("Analyzing…"):
-                    out = _run_pipeline(
-                        picked_img,
-                        tier=tier,
-                        include_device=include_device,
-                        max_dim=max_dim,
-                        min_side=min_side,
-                        rec=REC,
-                        flags={"sensitive": flag_sensitive, "acne_prone": flag_acne, "pregnant": flag_preg},
-                    )
-
-                if out.get("error"):
-                    st.error(out["error"])
-                else:
-                    st.session_state["pipeline_out"] = out
-                    st.session_state["img_source"] = picked_img
-                    st.session_state["img_source_label"] = "Dataset"
-                    st.rerun()
