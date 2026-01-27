@@ -31,8 +31,6 @@ It takes a face photo, detects a **face ROI (region of interest)** (YOLO/OpenCV)
 
 ## Repository layout (what each file is for)
 
-> Names may differ slightly depending on your branch; this is the intended contract.
-
 ```
 
 .
