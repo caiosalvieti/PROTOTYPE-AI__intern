@@ -13,7 +13,7 @@ from core.yolo_roi import skinaizer_model_core
 st.set_page_config(page_title="SkinAizer", page_icon="🧴", layout="wide")
 
 # -----------------------------
-# Custom CSS (Modern "Foreo" Style)
+# Custom CSS (Modern "Foreo" Style + Chat Polish)
 # -----------------------------
 def load_custom_css():
     st.markdown("""
@@ -49,7 +49,7 @@ def load_custom_css():
             font-weight: 600;
         }
 
-        /* --- BUTTONS --- */
+        /* --- BUTTONS (Global) --- */
         div.stButton > button {
             border-radius: 25px;
             font-weight: 600;
@@ -62,13 +62,52 @@ def load_custom_css():
             box-shadow: 0 4px 10px rgba(229, 0, 125, 0.4);
         }
 
-        /* --- HEADERS --- */
-        h1, h2, h3 {
-            font-weight: 600;
-            letter-spacing: -0.5px;
-            color: #333;
+        /* --- CHAT STYLING (The "Apple/Messenger" Look) --- */
+        
+        /* 1. Chat Bubbles */
+        div[data-testid="stChatMessage"] {
+            border: none;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            background-color: transparent; 
+        }
+
+        /* AI Message (Left, Grey) */
+        div[data-testid="stChatMessage"]:nth-child(odd) {
+            background-color: #F0F2F6; 
+            border-radius: 20px 20px 20px 5px;
+            margin-right: 15%; /* Keep it to the left */
+        }
+
+        /* User Message (Right, Pink) */
+        div[data-testid="stChatMessage"]:nth-child(even) {
+            background-color: #E5007D; 
+            color: white;
+            border-radius: 20px 20px 5px 20px;
+            margin-left: 15%; /* Push it to the right */
         }
         
+        /* Fix text color inside pink user bubbles */
+        div[data-testid="stChatMessage"]:nth-child(even) p {
+            color: white !important;
+        }
+
+        /* 2. Option Buttons ("Pills") inside Chat */
+        div[data-testid="column"] button {
+            border-radius: 50px !important;
+            border: 1px solid #E5007D !important;
+            background-color: white !important;
+            color: #E5007D !important;
+            font-size: 0.85rem !important;
+            padding: 5px 15px !important;
+            margin: 2px !important;
+            box-shadow: none !important;
+        }
+        div[data-testid="column"] button:hover {
+            background-color: #E5007D !important;
+            color: white !important;
+        }
+
         /* --- SIDEBAR --- */
         section[data-testid="stSidebar"] {
             background-color: #F8F9FA;
@@ -78,15 +117,6 @@ def load_custom_css():
         /* --- IMAGES --- */
         img {
             border-radius: 12px;
-        }
-        
-        /* --- CHAT BUBBLES --- */
-        div[data-testid="stChatMessage"] {
-            background-color: #f9f9f9;
-            border-radius: 15px;
-            padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid #eee;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -144,10 +174,19 @@ BRIDGE_FUNNEL = [
 
 def bridge_render() -> Tuple[bool, Dict[str, str]]:
     """Renders the chat and returns (ready, answers)."""
-    # show history
+    # FOREO Avatar URL (Official logo or icon)
+    FOREO_AVATAR = "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/Foreo_logo.svg/1024px-Foreo_logo.svg.png"
+    
+    # Show history
     for m in st.session_state["bridge_messages"]:
-        with st.chat_message(m["role"]):
-            st.markdown(m["content"])
+        role = m["role"]
+        # Use avatar only for assistant to look professional
+        if role == "assistant":
+            with st.chat_message(role, avatar=FOREO_AVATAR):
+                st.markdown(m["content"])
+        else:
+            with st.chat_message(role): # Default user icon
+                st.markdown(m["content"])
 
     step = int(st.session_state["bridge_step"])
     if step >= len(BRIDGE_FUNNEL):
@@ -156,8 +195,11 @@ def bridge_render() -> Tuple[bool, Dict[str, str]]:
 
     key, q, options = BRIDGE_FUNNEL[step]
 
-    with st.chat_message("assistant"):
-        st.markdown(q)
+    # Render current question
+    with st.chat_message("assistant", avatar=FOREO_AVATAR):
+        st.markdown(f"**{q}**")
+        # Use columns to make buttons look like "Pills" / "Chips"
+        # We wrap them in a container to apply our specific CSS
         cols = st.columns(len(options))
         for i, opt in enumerate(options):
             if cols[i].button(opt, key=f"bridge_{step}_{i}"):
@@ -412,11 +454,10 @@ def build_schedule(plan: Dict[str, Any], rules: Dict[str, Any]) -> Dict[str, Lis
     # frequencies
     if sensitive:
         exfol_freq = "1×/week (night)"
-        serum_freq = "daily (buffer if needed)"
     else:
         exfol_freq = "2–3×/week (night)"
-        serum_freq = "daily"
 
+    # Helper for week block
     def week_block(title: str, am_steps: List[str], pm_steps: List[str], notes: List[str]):
         return {
             "title": title,
@@ -425,11 +466,20 @@ def build_schedule(plan: Dict[str, Any], rules: Dict[str, Any]) -> Dict[str, Lis
             "notes": " • ".join([n for n in notes if n]),
         }
 
-    # Build phases
+    # Define AM/PM basics
+    am_standard = ["Cleanse", _fmt_item(serum), _fmt_item(mois), _fmt_item(spf)]
+    pm_basic = ["Cleanse", _fmt_item(mois)]
+    
+    if exfol:
+        pm_exfol = ["Cleanse", f"{_fmt_item(exfol)}  \n_{exfol_freq}_", _fmt_item(mois)]
+    else:
+        pm_exfol = pm_basic
+
+    # --- Weeks ---
     w1 = week_block(
         "Week 1 — Balance & barrier",
-        am_steps=["Cleanse", _fmt_item(serum), _fmt_item(mois), _fmt_item(spf)],
-        pm_steps=["Cleanse", _fmt_item(mois)],
+        am_steps=am_standard,
+        pm_steps=pm_basic,
         notes=[
             "Keep it boring. Photo-based baseline first.",
             f"Device: {_fmt_item(dev) if dev else 'optional'} (gentle, 2–3×/week)."
@@ -438,45 +488,67 @@ def build_schedule(plan: Dict[str, Any], rules: Dict[str, Any]) -> Dict[str, Lis
 
     w2 = week_block(
         "Week 2 — Active treatment",
-        am_steps=["Cleanse", _fmt_item(serum), _fmt_item(mois), _fmt_item(spf)],
-        pm_steps=["Cleanse", f"{_fmt_item(exfol)}  \n_{exfol_freq}_", _fmt_item(mois)] if exfol else ["Cleanse", _fmt_item(mois)],
+        am_steps=am_standard,
+        pm_steps=pm_exfol, 
         notes=[
             "Introduce only 1 strong active at a time.",
             "If irritation: stop actives 72h, focus moisturizer + SPF."
         ]
     )
 
+    if sensitive:
+        pm_w3 = pm_basic
+    else:
+        pm_w3 = pm_exfol
+
     w3 = week_block(
         "Week 3 — Consolidation & protection",
-        am_steps=["Cleanse", _fmt_item(serum), _fmt_item(mois), _fmt_item(spf)],
-        pm_steps=["Cleanse", _fmt_item(mois)] if sensitive else (["Cleanse", f"{_fmt_item(exfol)}  \n_{exfol_freq}_", _fmt_item(mois)] if exfol else ["Cleanse", _fmt_item(mois)]),
-        notes=[
-            "Stabilize. Small increases only if skin is calm.",
-        ]
+        am_steps=am_standard,
+        pm_steps=pm_w3,
+        notes=["Stabilize. Small increases only if skin is calm."]
     )
 
     if plan_len == "3_weeks":
         return {"3-week plan": [w1, w2, w3]}
 
-    # 1-month = slower ramp
+    # --- 1-Month Logic ---
+    if exfol:
+        pm_w2_slow = ["Cleanse", f"{_fmt_item(exfol)}  \n_1×/week (night)_", _fmt_item(mois)]
+    else:
+        pm_w2_slow = pm_basic
+
     w2_slow = week_block(
         "Week 2 — Gentle active intro",
-        am_steps=["Cleanse", _fmt_item(serum), _fmt_item(mois), _fmt_item(spf)],
-        pm_steps=["Cleanse", f"{_fmt_item(exfol)}  \n_1×/week (night)_", _fmt_item(mois)] if exfol else ["Cleanse", _fmt_item(mois)],
+        am_steps=am_standard,
+        pm_steps=pm_w2_slow,
         notes=["Start low frequency. Track redness/itching."]
     )
+
+    freq_w3 = '1–2×/week (night)' if sensitive else '2×/week (night)'
+    if exfol:
+        pm_w3_slow = ["Cleanse", f"{_fmt_item(exfol)}  \n_{freq_w3}_", _fmt_item(mois)]
+    else:
+        pm_w3_slow = pm_basic
+
     w3_slow = week_block(
         "Week 3 — Build tolerance",
-        am_steps=["Cleanse", _fmt_item(serum), _fmt_item(mois), _fmt_item(spf)],
-        pm_steps=["Cleanse", f"{_fmt_item(exfol)}  \n_{'1–2×/week (night)' if sensitive else '2×/week (night)'}_", _fmt_item(mois)] if exfol else ["Cleanse", _fmt_item(mois)],
+        am_steps=am_standard,
+        pm_steps=pm_w3_slow,
         notes=["If stable, increase one step."]
     )
+
+    if sensitive:
+        pm_w4 = pm_basic
+    else:
+        pm_w4 = pm_exfol
+
     w4 = week_block(
         "Week 4 — Consolidate",
-        am_steps=["Cleanse", _fmt_item(serum), _fmt_item(mois), _fmt_item(spf)],
-        pm_steps=["Cleanse", f"{_fmt_item(exfol)}  \n_{exfol_freq}_", _fmt_item(mois)] if (exfol and not sensitive) else ["Cleanse", _fmt_item(mois)],
+        am_steps=am_standard,
+        pm_steps=pm_w4,
         notes=["Maintain. Re-take photo at end of week 4."]
     )
+
     return {"1-month plan": [w1, w2_slow, w3_slow, w4]}
 
 
