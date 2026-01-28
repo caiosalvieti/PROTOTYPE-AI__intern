@@ -75,7 +75,6 @@ def _pick_size(available_ml: List[float], target_weeks: int, form: str, prefer_u
         try:
             idx = avail_sorted.index(chosen)
             if idx + 1 < len(avail_sorted):
-                # Simple upsell logic: if tier is High/Luxury, push bigger size
                 upsell_tier = str(kb_row.get("upsell_tier", "")).upper()
                 if upsell_tier in ("M", "L"):
                     chosen = next_ml
@@ -102,268 +101,262 @@ class RecEngine:
     def __init__(self, kb_path: str = DEFAULT_KB):
         self.logger = logging.getLogger("RecEngine")
         
-        # --- Mock Data Fallback ---
-        # If the CSV doesn't exist (likely in a new clone), create a mock KB in memory
-        # so the internship demo doesn't crash.
+        # Fallback to Mock KB if file missing
         if not os.path.isfile(kb_path):
-            self.logger.warning(f"KB not found at {kb_path}. Using IN-MEMORY MOCK KB.")
+            self.logger.warning(f"KB not found at {kb_path}. Using MOCK KB.")
             self.kb = self._create_mock_kb()
-            return
-
-        kb = pd.read_csv(kb_path)
-        self.kb = self._normalize_kb(kb)
+        else:
+            kb = pd.read_csv(kb_path)
+            self.kb = self._normalize_kb(kb)
 
     def _create_mock_kb(self) -> pd.DataFrame:
-        """Creates a minimal Foreo-aligned product list for demo purposes."""
         data = [
             {"name": "LUNA 4 Sensitive", "form": "device", "skin_types": "sensitive,dry", "price_usd": 199},
-            {"name": "LUNA 4 Combination", "form": "device", "skin_types": "combo,oily", "price_usd": 199},
             {"name": "Micro-Foam Cleanser", "form": "cleanser", "skin_types": "all", "price_usd": 49},
             {"name": "Serum Serum Serum", "form": "serum", "skin_types": "all", "actives": "hyaluronic_acid", "price_usd": 59},
-            {"name": "Supercharged Ha+PGA", "form": "moisturizer", "skin_types": "dry,normal", "price_usd": 69},
-            {"name": "UFO 2", "form": "device", "skin_types": "all", "price_usd": 279}
+            {"name": "Daily Sunscreen", "form": "spf", "skin_types": "all", "price_usd": 35}
         ]
         return self._normalize_kb(pd.DataFrame(data))
 
     def _normalize_kb(self, kb: pd.DataFrame) -> pd.DataFrame:
-        # Aliases & required defaults
         if "product_name" not in kb.columns and "name" in kb.columns:
             kb["product_name"] = kb["name"]
         if "name" not in kb.columns and "product_name" in kb.columns:
             kb["name"] = kb["product_name"]
         if "product_name" not in kb.columns: kb["product_name"] = ""
-        
-        # Ensure ID/SKU
-        if "sku" not in kb.columns and "id" in kb.columns: kb["sku"] = kb["id"]
-        if "sku" not in kb.columns: kb["sku"] = kb["product_name"].apply(lambda x: str(x)[:5].upper())
 
-        # Ensure standard cols
+        if "sku" not in kb.columns and "id" in kb.columns: kb["sku"] = kb["id"]
+        if "sku" not in kb.columns: kb["sku"] = ""
+
         for c in ["form","usage","upsell_tier","skin_types","concerns","actives",
-                  "brand","tier","category","link","fragrance_free","comedogenicity","contra",
-                  "size_ml","price_usd"]:
+            "brand","tier","category","link","fragrance_free","comedogenicity","contra",
+            "size_ml","price_usd"]:
             if c not in kb.columns: kb[c] = ""
 
-        # Normalize strings
-        for c in ["product_name","form","tier","brand","sku","category","usage","upsell_tier"]:
+        for c in ["product_name","name","form","tier","brand","sku","category","usage","upsell_tier"]:
             kb[c] = kb[c].astype(str).str.strip().str.lower()
-        
-        # Normalize numbers
         for c in ["size_ml","price_usd","comedogenicity"]:
             kb[c] = pd.to_numeric(kb[c], errors="coerce")
-            
+        
         kb["fragrance_free"] = (
-            kb["fragrance_free"]
-            .fillna(0).astype(str).str.strip().str.lower()
+            kb["fragrance_free"].fillna(0).astype(str).str.strip().str.lower()
             .isin(["1","true","yes","y"])
         )
 
-        # Parse list-like into sets
         kb["skin_types"] = kb["skin_types"].map(_safe_set)
         kb["concerns"]   = kb["concerns"].map(_safe_set)
         kb["actives"]    = kb["actives"].map(_safe_set)
         kb["contra"]     = kb["contra"].map(_safe_set)
 
-        # Infer missing form
         mask_missing_form = kb["form"].astype(str).str.strip().eq("")
         if mask_missing_form.any():
             kb.loc[mask_missing_form, "form"] = kb[mask_missing_form].apply(_infer_form, axis=1)
-            
+
         return kb
 
     def _to_float(self, v) -> float:
         try:
             return float(v)
         except Exception:
-            return 0.0
+            try:
+                arr = np.asarray(v, dtype=float).ravel()
+                return float(arr[0]) if arr.size else 0.0
+            except Exception:
+                return 0.0
 
     def _concern_weights(self, profile: Dict[str, Any], feats: Dict[str, float]) -> Dict[str, float]:
-        # Extract base scores
         s = {k: float(v) for k, v in (profile.get("scores") or {}).items()}
-        w = {}
+        w: Dict[str, float] = {}
         
-        # Map raw scores to concern weights
-        w["oil"] = s.get("oiliness", 0.0)
+        w["oil"] = w["shine"] = s.get("oiliness", 0.0)
         w["texture"] = s.get("texture", 0.0)
         w["redness"] = s.get("redness", 0.0)
-        w["hydration"] = s.get("dryness", 0.0) # Assume dryness score exists
         w["sensitivity"] = s.get("sensitivity", 0.0)
         
-        # Augment with Feature thresholds (Computer Vision overrides)
-        if feats.get("global_shn", 0) > SHINE_HIGH:
-            w["oil"] = max(w.get("oil", 0), 0.8)
-            w["acne"] = 0.7
-        if feats.get("global_txt", 0) > TEXTURE_HIGH:
-            w["texture"] = max(w.get("texture", 0), 0.9)
-        if feats.get("global_red", 0) > RED_HIGH:
-            w["redness"] = max(w.get("redness", 0), 0.85)
-            w["sensitivity"] = max(w.get("sensitivity", 0), 0.8)
+        # --- ARCHITECT FIX: Handle "hydration" vs "dryness" mismatch ---
+        # scores.py might output 'hydration' (meaning dryness score) or 'dryness'
+        dry_val = s.get("dryness", s.get("hydration", 0.0))
+        w["hydration"] = dry_val
+        w["barrier"] = max(dry_val * 0.7, s.get("sensitivity", 0.0) * 0.3)
+        
+        w["clogged_pores"] = max(s.get("oiliness", 0.0), s.get("texture", 0.0) * 0.6)
+        w["uv"] = 0.5
 
+        for item in (profile.get("prioritized_concerns") or []):
+            if isinstance(item, (list, tuple)) and item:
+                c = item[0]
+                if c == "oil_control": c = "oil"
+                val = float(item[1]) if len(item) > 1 else 1.2
+                w[c] = max(w.get(c, 0.0), val)
+        
+        # Override with CV flags
+        if feats.get("global_shn", 0) > SHINE_HIGH:
+            w["acne"] = max(w.get("acne", 0.0), 0.9)
+        if feats.get("global_txt", 0) > TEXTURE_HIGH:
+            w["texture"] = max(w.get("texture", 0.0), 1.0)
+        if feats.get("global_red", 0) > RED_HIGH:
+            w["redness"] = max(w.get("redness", 0.0), 0.9)
+            w["barrier"] = max(w.get("barrier", 0.0), 0.6)
+            
         return w
 
-    def _score_row(self, row: pd.Series, profile: Dict[str, Any], weights: Dict[str, float]) -> float:
-        score = 0.5 # Base score
-        
-        # 1. Skin Type Match
-        st = profile.get("skin_type", "normal")
-        if _covers_skin_type(row["skin_types"], st):
-            score += 0.3
-        elif row["skin_types"]: # If specific types listed but don't match
-            score -= 0.2
+    def _severity_for_row(self, row: pd.Series, weights: Dict[str, float]) -> float:
+        row_concerns = row.get("concerns") or set()
+        if not row_concerns: return 0.25
+        return max((weights.get(c, 0.0) for c in row_concerns), default=0.0)
 
-        # 2. Sensitivity Check (Standard)
-        if weights.get("sensitivity", 0) > THRESH["sensitive"]:
-            if not row["fragrance_free"]: score -= 0.5
-            if "sensitive" in row["skin_types"]: score += 0.4
+    def _score_row(self, row: pd.Series, profile: Dict[str, Any], feats: Dict[str, float]) -> float:
+        st = profile.get("skin_type", "")
+        weights = self._concern_weights(profile, feats)
 
-        # 3. Concern Matching
-        row_concerns = row["concerns"]
-        for concern, weight in weights.items():
-            if concern in row_concerns:
-                score += (weight * 0.5)
+        base_by_form = {
+            "serum": 0.90, "moisturizer": 0.85, "spf": 0.80, "cleanser": 0.60,
+            "exfoliant": 0.55, "mask": 0.30, "device": 0.25, "treatment": 0.90
+        }
+        form = str(row.get("form", "")).lower()
+        score = base_by_form.get(form, 0.40)
+
+        if _covers_skin_type(set(row["skin_types"]), st):
+            score += 0.40
+        elif row["skin_types"]:
+            score -= 0.10
+
+        sev = self._severity_for_row(row, weights)
+        score += 0.70 * sev
+
+        # --- ARCHITECT FIX: Stronger Sensitivity Penalty ---
+        sensitivity = weights.get("sensitivity", 0.0)
+        if sensitivity >= THRESH["sensitive"] and not bool(row.get("fragrance_free", False)):
+            score -= 1.0  # Harder penalty (was 0.5)
+
+        acne_prone = bool(profile.get("acne_prone")) or (weights.get("oil", 0) >= 0.65)
+        try:
+            if acne_prone and float(row.get("comedogenicity") or 0) > SAFE_COMEDO_MAX:
+                score -= 0.50
+        except Exception:
+            pass
+
+        if profile.get("pregnant", False) and ("retinoid_pregnancy" in (row.get("contra") or set())):
+            score -= 9.0
 
         return float(score)
 
-    def _generate_reason(self, row: pd.Series, weights: Dict[str, float]) -> str:
-        """
-        Architectural Helper: Reverse-engineers the score to explain WHY it was picked.
-        """
-        reasons = []
-        
-        # 1. Did we pick it for sensitivity?
-        if weights.get("sensitivity", 0) > THRESH["sensitive"]:
-            if row.get("fragrance_free"):
-                reasons.append("Fragrance-free for sensitivity")
-        
-        # 2. Did we pick it for a specific concern?
-        # Check the top 2 concerns
-        for concern, score in sorted(weights.items(), key=lambda x: x[1], reverse=True)[:2]:
-            if score > 0.5 and concern in row["concerns"]:
-                reasons.append(f"Targets {concern}")
-        
-        # 3. Fallback
-        if not reasons:
-            return f"Matches {row.get('skin_types', 'your')} skin type"
-            
-        return " & ".join(reasons)
+    def _pick_exfoliant_candidates(self, kb: pd.DataFrame, weights: Dict[str, float]) -> pd.DataFrame:
+        oil = weights.get("oil", 0.0)
+        dry = weights.get("hydration", 0.0)
+        if oil >= dry:
+            return kb[(kb["form"] == "exfoliant") & kb["actives"].fillna("").astype(str).str.contains(r"\bbha\b|salicylic", regex=True)]
+        else:
+            return kb[(kb["form"] == "exfoliant") & kb["actives"].fillna("").astype(str).str.contains(r"\baha\b|\bpha\b|lactic|mandelic", regex=True)]
 
-    def _get_device_settings(self, device_name: str, weights: Dict[str, float]) -> Dict[str, str]:
-        """
-        FOREO-SPECIFIC LOGIC:
-        Generates custom usage instructions based on skin analysis.
-        """
-        setting = "Standard Mode"
-        reason = "Balanced routine."
-        
+    # --- ARCHITECT ADDITION: Device Customization ---
+    def _customize_device(self, item: Dict, weights: Dict[str, float]) -> Dict:
+        """Injects usage instructions for Foreo devices based on user metrics."""
+        name = item.get("name", "").lower()
         sens = weights.get("sensitivity", 0.0)
         oil = weights.get("oil", 0.0)
-        text = weights.get("texture", 0.0)
-
-        if "luna" in device_name.lower():
-            if sens > THRESH["sensitive"]:
-                setting = "Gentle Mode (Intensity 3-4)"
-                reason = f"High sensitivity detected ({sens*100:.0f}%). Reduced intensity to protect barrier."
+        
+        usage = item.get("usage", "")
+        
+        if "luna" in name:
+            if sens > 0.6:
+                usage = "Gentle Mode (Intensity 3-4)"
+                item["reason"] += "; Adjusted for sensitivity"
             elif oil > 0.7:
-                setting = "Deep Cleansing (Intensity 10-12)"
-                reason = "Higher oiliness detected. Increased intensity for T-zone breakdown."
+                usage = "Deep Cleanse (Intensity 10)"
             else:
-                setting = "Daily Cleanse (Intensity 8)"
-                reason = "Optimal setting for daily maintenance."
+                usage = "Daily Mode (Intensity 8)"
         
-        elif "ufo" in device_name.lower():
+        elif "ufo" in name:
             if sens > 0.5:
-                setting = "Green LED + Cryotherapy"
-                reason = "Cooling Cryo-mode to reduce detected redness."
-            elif text > 0.6:
-                setting = "Red LED + Thermotherapy"
-                reason = "Heat + Red Light to stimulate collagen and smooth texture."
-        
-        elif "bear" in device_name.lower():
-            setting = "Contour Mode"
-            reason = "Microcurrent toning for definition."
+                usage = "Cryo + Green LED"
+            else:
+                usage = "Thermo + Red LED"
+                
+        item["usage"] = usage
+        return item
 
-        return {"setting": setting, "reason": reason}
-
-    def recommend(self, feats: dict, profile: dict, tier: str = "Core", include_device: bool = True) -> dict:
+    def recommend(self, feats: dict, profile: dict, tier: str = "Core", include_device: bool = True, top_k_per_type: int = 1) -> dict:
         tier = tier if tier in PLAN_TIERS else "Core"
         cfg = PLAN_TIERS[tier]
-        
+        target_weeks = cfg["weeks"]; prefer_upsell = cfg["upsell"]; need = dict(cfg["need"])
+
+        if int(feats.get("qa_fail", 0)) == 1:
+            return dict(plan="QA only", target_weeks=0, items=[], reasons={"qa": ["Photo QA fail"]})
+
         kb = self.kb.copy()
+        
+        # Defensive set casting
+        for col in ("skin_types", "concerns", "actives", "contra"):
+            if not kb[col].map(lambda x: isinstance(x, set)).all():
+                kb[col] = kb[col].map(_safe_set)
+
+        stype = profile.get("skin_type", "")
+        if stype:
+            kb = kb[kb["skin_types"].map(lambda s: (len(s) == 0) or (stype in s) or ("all" in s) or (stype == "combo" and ("normal" in s or "combo" in s)))]
+
+        scores = kb.apply(lambda r: self._to_float(self._score_row(r, profile, feats)), axis=1)
+        kb = kb.assign(__score=scores)
+
+        by_type: Dict[str, List[Dict[str, Any]]] = {}
+        reasons: Dict[str, List[str]] = {}
         weights = self._concern_weights(profile, feats)
-        
-        # --- ARCHITECT FIX: Stronger Sensitivity Penalty Wrapper ---
-        def safe_score(r):
-            s = self._score_row(r, profile, weights)
-            # Hard penalize fragrance if sensitive (The "Firewall")
-            if weights.get("sensitivity", 0) > THRESH["sensitive"] and not r["fragrance_free"]:
-                s -= 2.0 
-            return s
 
-        # Calculate scores using the safe wrapper
-        kb["__score"] = kb.apply(safe_score, axis=1)
-        
-        # Sort by score
-        kb = kb.sort_values("__score", ascending=False)
+        def pick_for(form: str | List[str], k: int, extra_filter=None, min_score: float = 0.0):
+            forms = [form] if isinstance(form, str) else form
+            cand = kb[kb["form"].isin(forms)].copy()
+            if extra_filter: cand = extra_filter(cand)
+            if cand.empty: return
+            
+            cand = cand.sort_values("__score", ascending=False)
+            if min_score > 0: cand = cand[cand["__score"] >= min_score]
+            if cand.empty: return
 
-        plan_items = []
-        devices = []
-        by_type = {}
-        
-        # Select products based on Tier requirements
-        for form, count in cfg["need"].items():
-            candidates = kb[kb["form"] == form]
-            if not candidates.empty:
-                selected = candidates.head(count)
-                for _, row in selected.iterrows():
-                    item = row.to_dict()
-                    
-                    # Generate dynamic reasoning
-                    reason_text = self._generate_reason(row, weights)
-                    
-                    # Clean up for UI
-                    ui_item = {
-                        "name": item.get("product_name"),
-                        "form": form,
-                        "brand": item.get("brand"),
-                        "price": item.get("price_usd"),
-                        "reason": reason_text, # Dynamic reason
-                        "usage": item.get("usage", "Use as directed")
-                    }
-                    plan_items.append(ui_item)
-                    by_type.setdefault(form, []).append(ui_item)
+            chosen_rows = cand.head(max(1, k))
+            chosen = []
+            for _, row in chosen_rows.iterrows():
+                # Size logic (simplified)
+                size_ml = float(row.get("size_ml") or 0.0)
+                
+                item = dict(
+                    sku=row.get("sku", ""),
+                    name=row.get("product_name", ""),
+                    brand=row.get("brand", ""),
+                    form=str(row.get("form", "")).lower(),
+                    size_ml=size_ml,
+                    usage=row.get("usage", ""),
+                    concerns=list(row.get("concerns") or []),
+                    price_usd=row.get("price_usd", None),
+                    fragrance_free=bool(row.get("fragrance_free", False)),
+                    reason=f"Matches {row.get('skin_types', {'all'})} skin",
+                )
+                
+                # --- ARCHITECT INJECTION ---
+                if "device" in forms:
+                    item = self._customize_device(item, weights)
+                
+                chosen.append(item)
 
-        # Device Selection (Critical for Foreo)
+            by_type[forms[0] if isinstance(form, str) else forms[0]] = chosen[:max(1, top_k_per_type)]
+
+        # Run logic
+        for f, k in need.items(): pick_for(f, k)
+        
+        if max(weights.get("texture", 0), weights.get("oil", 0)) >= THRESH["need_mild"]:
+            pick_for("exfoliant", 1, extra_filter=lambda df: self._pick_exfoliant_candidates(df, weights))
+
         if include_device:
-            dev_candidates = kb[kb["form"] == "device"]
-            if dev_candidates.empty:
-                # Fallback if no device in CSV
-                best_device = "LUNA 4"
-                dev_row = None
-            else:
-                # Re-sort devices specifically to ensure best match
-                dev_candidates = dev_candidates.sort_values("__score", ascending=False)
-                best_device = dev_candidates.iloc[0]["product_name"]
-                dev_row = dev_candidates.iloc[0]
-            
-            # Generate Custom Settings
-            dev_config = self._get_device_settings(best_device, weights)
-            
-            device_obj = {
-                "name": best_device,
-                "category": "Device",
-                "setting": dev_config["setting"],
-                "reason": dev_config["reason"],
-                "price_usd": dev_row["price_usd"] if dev_row is not None else 0,
-                "form": "device",
-                "usage": dev_config["setting"]
-            }
-            plan_items.append(device_obj)
-            devices.append(device_obj)
+            pick_for("device", 1)
 
-        return {
-            "plan_tier": tier,
-            "skin_type": profile.get("skin_type", "unknown"),
-            "concerns": list(weights.keys()),
-            "items": plan_items,  # Flat list for shopping cart
-            "devices": devices,   # Specific list for "My Routine" UI
-            "by_type": by_type
-        }
+        items: List[Dict[str, Any]] = []
+        for f in FORMS_ORDER:
+            items += by_type.get(f, [])
+
+        return dict(
+            plan=tier,
+            target_weeks=target_weeks,
+            skin_type=stype or profile.get("skin_type", "combo"),
+            items=items,
+            by_type=by_type,
+            reasons=reasons,
+        )
