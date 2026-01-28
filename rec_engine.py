@@ -210,9 +210,9 @@ class RecEngine:
         elif row["skin_types"]: # If specific types listed but don't match
             score -= 0.2
 
-        # 2. Sensitivity Check
+        # 2. Sensitivity Check (Standard)
         if weights.get("sensitivity", 0) > THRESH["sensitive"]:
-            if not row["fragrance_free"]: score -= 0.3
+            if not row["fragrance_free"]: score -= 0.5
             if "sensitive" in row["skin_types"]: score += 0.4
 
         # 3. Concern Matching
@@ -222,6 +222,29 @@ class RecEngine:
                 score += (weight * 0.5)
 
         return float(score)
+
+    def _generate_reason(self, row: pd.Series, weights: Dict[str, float]) -> str:
+        """
+        Architectural Helper: Reverse-engineers the score to explain WHY it was picked.
+        """
+        reasons = []
+        
+        # 1. Did we pick it for sensitivity?
+        if weights.get("sensitivity", 0) > THRESH["sensitive"]:
+            if row.get("fragrance_free"):
+                reasons.append("Fragrance-free for sensitivity")
+        
+        # 2. Did we pick it for a specific concern?
+        # Check the top 2 concerns
+        for concern, score in sorted(weights.items(), key=lambda x: x[1], reverse=True)[:2]:
+            if score > 0.5 and concern in row["concerns"]:
+                reasons.append(f"Targets {concern}")
+        
+        # 3. Fallback
+        if not reasons:
+            return f"Matches {row.get('skin_types', 'your')} skin type"
+            
+        return " & ".join(reasons)
 
     def _get_device_settings(self, device_name: str, weights: Dict[str, float]) -> Dict[str, str]:
         """
@@ -267,8 +290,16 @@ class RecEngine:
         kb = self.kb.copy()
         weights = self._concern_weights(profile, feats)
         
-        # Calculate scores for all products
-        kb["__score"] = kb.apply(lambda r: self._score_row(r, profile, weights), axis=1)
+        # --- ARCHITECT FIX: Stronger Sensitivity Penalty Wrapper ---
+        def safe_score(r):
+            s = self._score_row(r, profile, weights)
+            # Hard penalize fragrance if sensitive (The "Firewall")
+            if weights.get("sensitivity", 0) > THRESH["sensitive"] and not r["fragrance_free"]:
+                s -= 2.0 
+            return s
+
+        # Calculate scores using the safe wrapper
+        kb["__score"] = kb.apply(safe_score, axis=1)
         
         # Sort by score
         kb = kb.sort_values("__score", ascending=False)
@@ -284,13 +315,18 @@ class RecEngine:
                 selected = candidates.head(count)
                 for _, row in selected.iterrows():
                     item = row.to_dict()
+                    
+                    # Generate dynamic reasoning
+                    reason_text = self._generate_reason(row, weights)
+                    
                     # Clean up for UI
                     ui_item = {
                         "name": item.get("product_name"),
                         "form": form,
                         "brand": item.get("brand"),
                         "price": item.get("price_usd"),
-                        "reason": f"Matches skin type '{profile.get('skin_type')}'"
+                        "reason": reason_text, # Dynamic reason
+                        "usage": item.get("usage", "Use as directed")
                     }
                     plan_items.append(ui_item)
                     by_type.setdefault(form, []).append(ui_item)
@@ -301,8 +337,12 @@ class RecEngine:
             if dev_candidates.empty:
                 # Fallback if no device in CSV
                 best_device = "LUNA 4"
+                dev_row = None
             else:
+                # Re-sort devices specifically to ensure best match
+                dev_candidates = dev_candidates.sort_values("__score", ascending=False)
                 best_device = dev_candidates.iloc[0]["product_name"]
+                dev_row = dev_candidates.iloc[0]
             
             # Generate Custom Settings
             dev_config = self._get_device_settings(best_device, weights)
@@ -311,7 +351,10 @@ class RecEngine:
                 "name": best_device,
                 "category": "Device",
                 "setting": dev_config["setting"],
-                "reason": dev_config["reason"]
+                "reason": dev_config["reason"],
+                "price_usd": dev_row["price_usd"] if dev_row is not None else 0,
+                "form": "device",
+                "usage": dev_config["setting"]
             }
             plan_items.append(device_obj)
             devices.append(device_obj)
